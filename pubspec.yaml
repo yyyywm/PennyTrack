@@ -1,4 +1,4 @@
-name: bookeep
+name: pennytrack
 description: A personal bookkeeping Flutter application.
 
 publish_to: 'none'
@@ -22,6 +22,7 @@ dev_dependencies:
     sdk: flutter
 
   flutter_lints: ^2.0.0
+  flutter_launcher_icons: ^0.14.3
 
 flutter:
   uses-material-design: true
@@ -30,3 +31,10 @@ flutter:
     - assets/images/analyse.png
     - assets/images/me.png
     - assets/images/record.png
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#FFFFFF"
+  adaptive_icon_foreground: "assets/icon/icon.png"
