@@ -1,0 +1,36 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: bookkeeping-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: bookkeeping
+      MYSQL_USER: bookkeeping
+      MYSQL_PASSWORD: bookkeeping
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "bookkeeping", "-pbookkeeping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build: ./backend
+    container_name: bookkeeping-api
+    restart: unless-stopped
+    ports:
+      - "5300:5300"
+    environment:
+      PORT: 5300
+      BOOKKEEPING_SECRET_KEY: ${BOOKKEEPING_SECRET_KEY:-change-me-in-production}
+      BOOKKEEPING_DATABASE_URL: ${BOOKKEEPING_DATABASE_URL:-mysql+pymysql://bookkeeping:bookkeeping@db:3306/bookkeeping}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mysql_data:
