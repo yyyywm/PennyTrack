@@ -329,7 +329,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
 
 
 # 创建FastAPI应用
-app = FastAPI(title="财务记账API", description="极简记账应用的后端API服务")
+app = FastAPI(title="PennyTrack API", description="PennyTrack 后端 API 服务")
 
 # 配置CORS
 app.add_middleware(
