@@ -1,4 +1,4 @@
-# bookeep
+# PennyTrack
 
 一个基于 Flutter + FastAPI 的个人记账本应用。
 
