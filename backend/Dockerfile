@@ -1,15 +1,19 @@
 # ===== Stage 1: builder =====
-# 单独的构建阶段用于编译 Python 依赖（cryptography 等可能需要编译工具链）
 FROM python:3.11-slim AS builder
 
-# 安装编译期所需的系统依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 使用国内 Debian 镜像源，大幅加速 apt 下载
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # 使用独立 venv 便于整个目录拷贝到最终镜像
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+
+# 使用国内 PyPI 镜像源，大幅加速 pip 下载
+ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
 
 WORKDIR /build
 COPY requirements.txt .
