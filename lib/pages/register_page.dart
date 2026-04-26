@@ -15,6 +15,8 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
   @override
   void initState() {
@@ -64,7 +66,8 @@ class _RegisterPageState extends State<RegisterPage> {
     }
 
     try {
-      final success = await AuthService.instance.register(username, email, password);
+      final success =
+          await AuthService.instance.register(username, email, password);
 
       if (!mounted) return;
 
@@ -86,93 +89,177 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     final auth = AuthService.instance;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('注册'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(25),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircleAvatar(
-                backgroundImage: AssetImage('assets/images/me.png'),
-                radius: 40,
+      extendBodyBehindAppBar: true,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            // 顶部渐变 header
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.fromLTRB(24, 90, 24, 28),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    cs.primaryContainer,
+                    cs.secondaryContainer,
+                  ],
+                ),
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(28),
+                ),
               ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _usernameController,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    backgroundImage: const AssetImage('assets/images/me.png'),
+                    radius: 36,
+                    backgroundColor: Colors.white.withValues(alpha: 0.5),
                   ),
-                  hintText: '用户名',
-                  suffixIcon: const Icon(Icons.person),
-                ),
-                textInputAction: TextInputAction.next,
-                enabled: !auth.isLoading,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 12),
+                  const Text(
+                    '创建账号',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  hintText: '邮箱',
-                  suffixIcon: const Icon(Icons.email),
-                ),
-                textInputAction: TextInputAction.next,
-                enabled: !auth.isLoading,
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _passwordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  const SizedBox(height: 4),
+                  Text(
+                    '加入 PennyTrack，开始管理你的钱包',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.black.withValues(alpha: 0.6),
+                    ),
                   ),
-                  hintText: '密码',
-                  suffixIcon: const Icon(Icons.lock),
-                ),
-                textInputAction: TextInputAction.next,
-                enabled: !auth.isLoading,
+                ],
               ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _confirmPasswordController,
-                obscureText: true,
-                decoration: InputDecoration(
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+            ),
+            const SizedBox(height: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  TextField(
+                    controller: _usernameController,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      hintText: '用户名',
+                      prefixIcon: const Icon(Icons.person_outline),
+                    ),
+                    textInputAction: TextInputAction.next,
+                    enabled: !auth.isLoading,
+                    autofillHints: const [AutofillHints.username],
                   ),
-                  hintText: '确认密码',
-                  suffixIcon: const Icon(Icons.lock_outline),
-                ),
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _handleRegister(),
-                enabled: !auth.isLoading,
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      hintText: '邮箱',
+                      prefixIcon: const Icon(Icons.email_outlined),
+                    ),
+                    textInputAction: TextInputAction.next,
+                    enabled: !auth.isLoading,
+                    autofillHints: const [AutofillHints.email],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePassword,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      hintText: '密码',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() => _obscurePassword = !_obscurePassword);
+                        },
+                      ),
+                    ),
+                    textInputAction: TextInputAction.next,
+                    enabled: !auth.isLoading,
+                    autofillHints: const [AutofillHints.newPassword],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _confirmPasswordController,
+                    obscureText: _obscureConfirmPassword,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      hintText: '确认密码',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscureConfirmPassword
+                              ? Icons.visibility_off
+                              : Icons.visibility,
+                        ),
+                        onPressed: () {
+                          setState(() => _obscureConfirmPassword =
+                              !_obscureConfirmPassword);
+                        },
+                      ),
+                    ),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) => _handleRegister(),
+                    enabled: !auth.isLoading,
+                    autofillHints: const [AutofillHints.newPassword],
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      onPressed: auth.isLoading ? null : _handleRegister,
+                      child: auth.isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text(
+                              '注册',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: auth.isLoading ? null : _handleRegister,
-                  child: auth.isLoading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('注册'),
-                ),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 32),
+          ],
         ),
       ),
     );

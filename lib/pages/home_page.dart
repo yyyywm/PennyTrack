@@ -12,23 +12,28 @@ class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<HomePage> createState() => HomePageState();
 }
 
-class _HomePageState extends State<HomePage> {
+/// 公开 State 以便 NavigatePage 通过 GlobalKey 调用 [openAddSheet]
+class HomePageState extends State<HomePage> {
   List<Transaction> _transactions = [];
   bool _isLoading = false;
+  bool _hasError = false;
+  String _errorMessage = '';
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
-  bool _isToday = true;
+
+  /// 0=今日 1=本月 2=自定义
+  int _rangeMode = 0;
 
   @override
   void initState() {
     super.initState();
     AuthService.instance.addListener(_onAuthChanged);
-    _startDate = DateTime(_endDate.year, _endDate.month, _endDate.day);
-    _endDate = DateTime(_endDate.year, _endDate.month, _endDate.day,
-        23, 59, 59);
+    final now = DateTime.now();
+    _startDate = DateTime(now.year, now.month, now.day);
+    _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
     _loadData();
   }
 
@@ -44,24 +49,43 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  /// 公开接口：从外部（导航 FAB）触发添加记录弹窗
+  void openAddSheet() {
+    showAddRecordBottomSheet(
+      context: context,
+      onAdded: _addTransaction,
+    );
+  }
+
   Future<void> _loadData() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+      _errorMessage = '';
+    });
 
     final auth = AuthService.instance;
     List<Transaction> items = [];
 
-    if (auth.isLoggedIn) {
-      items = await ApiService.getTransactions(
-        startDate: _startDate,
-        endDate: _endDate,
-        limit: 200,
-      );
-    } else {
-      items = await StorageService.loadTodayItems();
+    try {
+      if (auth.isLoggedIn) {
+        items = await ApiService.getTransactions(
+          startDate: _startDate,
+          endDate: _endDate,
+          limit: 200,
+        );
+      } else {
+        items = await StorageService.loadTodayItems();
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _hasError = true;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      });
     }
 
-    // await 之后 widget 可能已 dispose，必须重新检查 mounted
     if (!mounted) return;
     setState(() {
       _transactions = items;
@@ -72,7 +96,7 @@ class _HomePageState extends State<HomePage> {
   void _setToday() {
     final now = DateTime.now();
     setState(() {
-      _isToday = true;
+      _rangeMode = 0;
       _startDate = DateTime(now.year, now.month, now.day);
       _endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
     });
@@ -82,7 +106,7 @@ class _HomePageState extends State<HomePage> {
   void _setMonth() {
     final now = DateTime.now();
     setState(() {
-      _isToday = false;
+      _rangeMode = 1;
       _startDate = DateTime(now.year, now.month, 1);
       _endDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
     });
@@ -99,11 +123,11 @@ class _HomePageState extends State<HomePage> {
     if (picked != null) {
       if (!mounted) return;
       setState(() {
-        _isToday = false;
-        _startDate = DateTime(picked.start.year, picked.start.month,
-            picked.start.day);
-        _endDate = DateTime(picked.end.year, picked.end.month,
-            picked.end.day, 23, 59, 59);
+        _rangeMode = 2;
+        _startDate = DateTime(
+            picked.start.year, picked.start.month, picked.start.day);
+        _endDate = DateTime(
+            picked.end.year, picked.end.month, picked.end.day, 23, 59, 59);
       });
       _loadData();
     }
@@ -115,8 +139,6 @@ class _HomePageState extends State<HomePage> {
 
     if (auth.isLoggedIn) {
       await ApiService.createTransaction(newItem);
-      // 登录状态下数据已同步到后端，不再保存到本地缓存，
-      // 避免退出登录后再次同步导致重复上传
     } else {
       await StorageService.addItem(newItem);
     }
@@ -137,7 +159,6 @@ class _HomePageState extends State<HomePage> {
       await ApiService.updateTransaction(updated.id, updated);
     }
 
-    // 更新本地缓存
     final localItems = await StorageService.loadTodayItems();
     final index = localItems.indexWhere((t) => t.id == updated.id);
     if (index >= 0) {
@@ -181,101 +202,45 @@ class _HomePageState extends State<HomePage> {
         .fold(0, (sum, t) => sum + t.amount);
   }
 
+  String get _rangeLabel {
+    switch (_rangeMode) {
+      case 0:
+        return '今日结余';
+      case 1:
+        return '本月结余';
+      default:
+        final s = _startDate;
+        final e = _endDate;
+        final sameDay =
+            s.year == e.year && s.month == e.month && s.day == e.day;
+        if (sameDay) {
+          return '${s.month}.${s.day} 结余';
+        }
+        return '${s.month}.${s.day} - ${e.month}.${e.day} 结余';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SafeArea(
+        bottom: false,
         child: Column(
           children: [
-            // 日期筛选栏
-            Row(
-              children: [
-                ChoiceChip(
-                  label: const Text('今日'),
-                  selected: _isToday,
-                  onSelected: (_) => _setToday(),
-                ),
-                const SizedBox(width: 8),
-                ChoiceChip(
-                  label: const Text('本月'),
-                  selected: !_isToday,
-                  onSelected: (_) => _setMonth(),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.date_range),
-                  onPressed: _pickDateRange,
-                  tooltip: '自定义日期',
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // 收支汇总
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _buildSummaryItem('收入', _totalIncome, Colors.green),
-                  _buildSummaryItem('支出', _totalExpense, Colors.red),
-                  _buildSummaryItem(
-                    '结余',
-                    _totalIncome - _totalExpense,
-                    _totalIncome >= _totalExpense
-                        ? Colors.green
-                        : Colors.red,
-                  ),
-                ],
-              ),
+            _buildHeader(),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+              child: _buildSummaryHero(),
             ),
             const SizedBox(height: 16),
-
-            // 标题
-            const Text(
-              '记账明细',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-
-            // 列表
+            _buildFilterBar(),
+            const SizedBox(height: 8),
+            _buildListHeader(),
+            const SizedBox(height: 4),
             Expanded(
-              child: _isLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : _transactions.isEmpty
-                      ? const Center(child: Text('暂无记录'))
-                      : ListView.builder(
-                          itemCount: _transactions.length,
-                          itemBuilder: (context, index) {
-                            final item = _transactions[index];
-                            return TransactionCard(
-                              transaction: item,
-                              onEdit: (updated) => _updateTransaction(updated),
-                              onDeleteApi: () => _deleteTransaction(item.id),
-                            );
-                          },
-                        ),
-            ),
-            const SizedBox(height: 12),
-
-            // 添加按钮
-            InkWell(
-              onTap: () {
-                showAddRecordBottomSheet(
-                  context: context,
-                  onAdded: _addTransaction,
-                );
-              },
-              borderRadius: BorderRadius.circular(50),
-              child: const CircleAvatar(
-                backgroundImage:
-                    AssetImage('assets/images/record.png'),
-                radius: 36,
+              child: RefreshIndicator(
+                onRefresh: _loadData,
+                child: _buildList(),
               ),
             ),
           ],
@@ -284,20 +249,312 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildSummaryItem(String label, double amount, Color color) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+  // ========== 顶部页面标题 ==========
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 12, 8),
+      child: Row(
+        children: [
+          const Text(
+            '记一笔',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+          ),
+          const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.event_note_outlined),
+            onPressed: _pickDateRange,
+            tooltip: '自定义日期',
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== 汇总大卡片 ==========
+  Widget _buildSummaryHero() {
+    final cs = Theme.of(context).colorScheme;
+    final balance = _totalIncome - _totalExpense;
+    final balanceColor = balance >= 0 ? Colors.black87 : Colors.red[700]!;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            cs.primaryContainer,
+            cs.secondaryContainer,
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          '${amount >= 0 ? '+' : ''}${amount.toStringAsFixed(2)}',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: color,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            _rangeLabel,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.black.withValues(alpha: 0.55),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(
+                '￥',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: balanceColor,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    balance.toStringAsFixed(2),
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      color: balanceColor,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            height: 1,
+            color: Colors.black.withValues(alpha: 0.08),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSummaryEntry(
+                  Icons.arrow_upward_rounded,
+                  '收入',
+                  _totalIncome,
+                  Colors.green[700]!,
+                ),
+              ),
+              Container(
+                width: 1,
+                height: 36,
+                color: Colors.black.withValues(alpha: 0.08),
+              ),
+              Expanded(
+                child: _buildSummaryEntry(
+                  Icons.arrow_downward_rounded,
+                  '支出',
+                  _totalExpense,
+                  Colors.red[700]!,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSummaryEntry(
+      IconData icon, String label, double amount, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.14),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 18, color: color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.black.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    amount.toStringAsFixed(2),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: color,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== 筛选栏 ==========
+  Widget _buildFilterBar() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: SegmentedButton<int>(
+        style: const ButtonStyle(
+          visualDensity: VisualDensity.compact,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        segments: const [
+          ButtonSegment(value: 0, label: Text('今日')),
+          ButtonSegment(value: 1, label: Text('本月')),
+          ButtonSegment(value: 2, label: Text('自定义')),
+        ],
+        selected: {_rangeMode},
+        showSelectedIcon: false,
+        onSelectionChanged: (set) {
+          final v = set.first;
+          if (v == 0) {
+            _setToday();
+          } else if (v == 1) {
+            _setMonth();
+          } else {
+            _pickDateRange();
+          }
+        },
+      ),
+    );
+  }
+
+  // ========== 明细标题 ==========
+  Widget _buildListHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          const Text(
+            '记账明细',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '${_transactions.length} 笔',
+            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== 列表 ==========
+  Widget _buildList() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_hasError) return _buildErrorView();
+    if (_transactions.isEmpty) return _buildEmptyView();
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 120),
+      itemCount: _transactions.length,
+      itemBuilder: (context, index) {
+        final item = _transactions[index];
+        return TransactionCard(
+          transaction: item,
+          onEdit: (updated) => _updateTransaction(updated),
+          onDeleteApi: () => _deleteTransaction(item.id),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyView() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 60),
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.receipt_long_outlined,
+                  size: 56, color: Colors.grey[400]),
+              const SizedBox(height: 12),
+              Text(
+                '暂无记录',
+                style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '点击右下角按钮添加一笔',
+                style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildErrorView() {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 60),
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, size: 56, color: Colors.grey[400]),
+              const SizedBox(height: 12),
+              Text(
+                '加载失败',
+                style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+              ),
+              const SizedBox(height: 6),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32),
+                child: Text(
+                  _errorMessage,
+                  style: TextStyle(fontSize: 12, color: Colors.grey[500]),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: _loadData,
+                icon: const Icon(Icons.refresh),
+                label: const Text('重试'),
+              ),
+            ],
           ),
         ),
       ],

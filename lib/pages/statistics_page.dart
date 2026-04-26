@@ -20,7 +20,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
   TrendsData? _trends;
   DateTime _currentMonth = DateTime.now();
 
-  String get _monthYearString => '${_currentMonth.year}年${_currentMonth.month}月';
+  String get _monthYearString =>
+      '${_currentMonth.year}年${_currentMonth.month}月';
 
   @override
   void initState() {
@@ -44,11 +45,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
     final auth = AuthService.instance;
     if (auth.isLoggedIn) {
-      // 使用本地时间的月初/月末再转 UTC，确保按用户所在时区统计
-      final startOfMonth = DateTime(_currentMonth.year, _currentMonth.month, 1).toUtc();
-      final endOfMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1)
-          .subtract(const Duration(microseconds: 1))
-          .toUtc();
+      final startOfMonth =
+          DateTime(_currentMonth.year, _currentMonth.month, 1).toUtc();
+      final endOfMonth =
+          DateTime(_currentMonth.year, _currentMonth.month + 1, 1)
+              .subtract(const Duration(microseconds: 1))
+              .toUtc();
 
       final summary = await ApiService.getSummary(
         startDate: startOfMonth,
@@ -157,140 +159,117 @@ class _StatisticsPageState extends State<StatisticsPage> {
     final auth = AuthService.instance;
 
     if (!auth.isLoggedIn) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock_outline, size: 64, color: Colors.grey),
-            SizedBox(height: 16),
-            Text('请先登录后查看统计', style: TextStyle(fontSize: 16)),
-          ],
+      return SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_outline, size: 56, color: Colors.grey[400]),
+              const SizedBox(height: 12),
+              Text(
+                '请先登录后查看统计',
+                style: TextStyle(fontSize: 15, color: Colors.grey[700]),
+              ),
+            ],
+          ),
         ),
       );
     }
 
     return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  _buildMonthHeader(),
-                  const SizedBox(height: 20),
-                  _buildSummarySection(),
-                  const SizedBox(height: 24),
-                  _buildCategorySection(),
-                  const SizedBox(height: 24),
-                  _buildTrendsSection(),
-                  const SizedBox(height: 32),
-                ],
+      body: SafeArea(
+        bottom: false,
+        child: RefreshIndicator(
+          onRefresh: _loadData,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+            children: [
+              _buildPageHeader(),
+              const SizedBox(height: 12),
+              _buildMonthCapsule(),
+              if (_isLoading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: LinearProgressIndicator(minHeight: 2),
+                ),
+              const SizedBox(height: 16),
+              Opacity(
+                opacity: _isLoading ? 0.5 : 1.0,
+                child: _buildSummarySection(),
               ),
-            ),
-    );
-  }
-
-  // ========== 月份导航 ==========
-  Widget _buildMonthHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.chevron_left),
-          onPressed: _previousMonth,
-        ),
-        GestureDetector(
-          onTap: _showMonthPicker,
-          child: Text(
-            _monthYearString,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              const SizedBox(height: 20),
+              Opacity(
+                opacity: _isLoading ? 0.5 : 1.0,
+                child: _buildCategoryCard(),
+              ),
+              const SizedBox(height: 20),
+              Opacity(
+                opacity: _isLoading ? 0.5 : 1.0,
+                child: _buildTrendsCard(),
+              ),
+            ],
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.chevron_right),
-          onPressed: _nextMonth,
-        ),
-      ],
+      ),
     );
   }
 
-  // ========== 摘要区域 ==========
-  Widget _buildSummarySection() {
-    if (_summary == null) {
-      return const Center(child: Text('暂无数据'));
-    }
-
-    final s = _summary!;
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildSummaryCard(
-                '收入',
-                s.income,
-                Colors.green,
-                Icons.arrow_upward,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildSummaryCard(
-                '支出',
-                s.expense,
-                Colors.red,
-                Icons.arrow_downward,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildSummaryCard(
-                '结余',
-                s.balance,
-                s.balance >= 0 ? Colors.green : Colors.red,
-                Icons.account_balance_wallet,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _buildMoMChip('收入环比', s.incomeChange),
-            _buildMoMChip('支出环比', s.expenseChange),
-            _buildMoMChip('结余环比', s.balanceChange),
-          ],
-        ),
-      ],
+  // ========== 顶部页面标题 ==========
+  Widget _buildPageHeader() {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(4, 4, 0, 0),
+      child: Text(
+        '统计',
+        style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
+      ),
     );
   }
 
-  Widget _buildSummaryCard(
-      String title, double value, Color color, IconData icon) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        child: Column(
+  // ========== 月份导航胶囊 ==========
+  Widget _buildMonthCapsule() {
+    return Center(
+      child: Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context)
+              .colorScheme
+              .surfaceContainerHighest
+              .withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(40),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: color, size: 20),
-            const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            IconButton(
+              icon: const Icon(Icons.chevron_left, size: 22),
+              onPressed: _isLoading ? null : _previousMonth,
+              visualDensity: VisualDensity.compact,
             ),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                value.toStringAsFixed(2),
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: color,
+            InkWell(
+              borderRadius: BorderRadius.circular(20),
+              onTap: _isLoading ? null : _showMonthPicker,
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _monthYearString,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(Icons.arrow_drop_down,
+                        size: 18, color: Colors.grey[700]),
+                  ],
                 ),
               ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, size: 22),
+              onPressed: _isLoading ? null : _nextMonth,
+              visualDensity: VisualDensity.compact,
             ),
           ],
         ),
@@ -298,169 +277,436 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  Widget _buildMoMChip(String title, double change) {
-    final isPositive = change >= 0;
-    final color = isPositive ? Colors.green : Colors.red;
+  // ========== 摘要区域 ==========
+  Widget _buildSummarySection() {
+    if (_summary == null) {
+      return _buildEmptyCard('暂无数据', Icons.insights_outlined);
+    }
+
+    final s = _summary!;
+
     return Column(
       children: [
-        Text(title, style: TextStyle(fontSize: 11, color: Colors.grey[600])),
-        const SizedBox(height: 2),
         Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isPositive ? Icons.arrow_upward : Icons.arrow_downward,
-              color: color,
-              size: 12,
+            Expanded(
+              child: _buildMetricCard(
+                icon: Icons.arrow_upward_rounded,
+                label: '收入',
+                value: s.income,
+                change: s.incomeChange,
+                color: Colors.green[700]!,
+              ),
             ),
-            Text(
-              '${change.abs().toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: color,
+            const SizedBox(width: 12),
+            Expanded(
+              child: _buildMetricCard(
+                icon: Icons.arrow_downward_rounded,
+                label: '支出',
+                value: s.expense,
+                change: s.expenseChange,
+                color: Colors.red[700]!,
+                invertChange: true,
               ),
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        _buildBalanceCard(s),
       ],
     );
   }
 
-  // ========== 分类区域 ==========
-  Widget _buildCategorySection() {
-    final hasData = _categoryStats != null && _categoryStats!.labels.isNotEmpty;
+  Widget _buildMetricCard({
+    required IconData icon,
+    required String label,
+    required double value,
+    required double change,
+    required Color color,
+    bool invertChange = false,
+  }) {
+    // invertChange: 支出环比上涨视为坏（红），下降视为好（绿）
+    final isUp = change >= 0;
+    final isGood = invertChange ? !isUp : isUp;
+    final changeColor = isGood ? Colors.green[600]! : Colors.red[600]!;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '支出分类',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        if (!hasData)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Column(
-                children: [
-                  Icon(Icons.pie_chart_outline, size: 48, color: Colors.grey),
-                  SizedBox(height: 8),
-                  Text('暂无分类数据', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
-          )
-        else ...[
-          Center(
-            child: SizedBox(
-              height: 200,
-              child: CustomPaint(
-                size: const Size(200, 200),
-                painter: PieChartPainter(
-                  values: _categoryStats!.values,
-                  colors: _safeColors(_categoryStats!.colors, _categoryStats!.values.length)
-                      .map(_colorFromString)
-                      .toList(),
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.13),
+                  borderRadius: BorderRadius.circular(8),
                 ),
+                child: Icon(icon, size: 16, color: color),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value.toStringAsFixed(2),
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: color,
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          ...List.generate(_categoryStats!.labels.length, (i) {
-            final safeColors = _safeColors(_categoryStats!.colors, _categoryStats!.labels.length);
-            return ListTile(
-              dense: true,
-              leading: CircleAvatar(
-                backgroundColor: _colorFromString(safeColors[i]),
-                radius: 8,
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                isUp ? Icons.arrow_upward : Icons.arrow_downward,
+                size: 12,
+                color: changeColor,
               ),
-              title: Text(_categoryStats!.labels[i]),
-              trailing: Text(
-                '${_categoryStats!.amounts[i].toStringAsFixed(2)} \uffe5 '
-                '(${_categoryStats!.values[i].toStringAsFixed(1)}%)',
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              Text(
+                ' ${change.abs().toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: changeColor,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            );
-          }),
+              const SizedBox(width: 4),
+              Text(
+                '环比',
+                style: TextStyle(fontSize: 11, color: Colors.grey[500]),
+              ),
+            ],
+          ),
         ],
-      ],
+      ),
     );
   }
 
-  // ========== 趋势区域 ==========
-  Widget _buildTrendsSection() {
+  Widget _buildBalanceCard(SummaryData s) {
+    final balanceColor =
+        s.balance >= 0 ? Colors.green[700]! : Colors.red[700]!;
+    final isUp = s.balanceChange >= 0;
+    final changeColor = isUp ? Colors.green[600]! : Colors.red[600]!;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Theme.of(context)
+                .colorScheme
+                .primaryContainer
+                .withValues(alpha: 0.7),
+            Theme.of(context)
+                .colorScheme
+                .secondaryContainer
+                .withValues(alpha: 0.7),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              Icons.account_balance_wallet_outlined,
+              color: balanceColor,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '本月结余',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.black.withValues(alpha: 0.6),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '￥${s.balance.toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                      color: balanceColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: changeColor.withValues(alpha: 0.13),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isUp ? Icons.arrow_upward : Icons.arrow_downward,
+                  size: 12,
+                  color: changeColor,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  '${s.balanceChange.abs().toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: changeColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ========== 分类卡片 ==========
+  Widget _buildCategoryCard() {
+    final hasData =
+        _categoryStats != null && _categoryStats!.labels.isNotEmpty;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '支出分类',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 16),
+          if (!hasData)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    Icon(Icons.pie_chart_outline,
+                        size: 44, color: Colors.grey[400]),
+                    const SizedBox(height: 8),
+                    Text(
+                      '暂无分类数据',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else ...[
+            Center(
+              child: SizedBox(
+                height: 180,
+                width: 180,
+                child: CustomPaint(
+                  size: const Size(180, 180),
+                  painter: PieChartPainter(
+                    values: _categoryStats!.values,
+                    colors: _safeColors(_categoryStats!.colors,
+                            _categoryStats!.values.length)
+                        .map(_colorFromString)
+                        .toList(),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...List.generate(_categoryStats!.labels.length, (i) {
+              final safeColors = _safeColors(
+                  _categoryStats!.colors, _categoryStats!.labels.length);
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: BoxDecoration(
+                        color: _colorFromString(safeColors[i]),
+                        borderRadius: BorderRadius.circular(3),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _categoryStats!.labels[i],
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                    ),
+                    Text(
+                      '￥${_categoryStats!.amounts[i].toStringAsFixed(2)}',
+                      style: const TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 48,
+                      child: Text(
+                        '${_categoryStats!.values[i].toStringAsFixed(1)}%',
+                        style:
+                            TextStyle(fontSize: 12, color: Colors.grey[600]),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // ========== 趋势卡片 ==========
+  Widget _buildTrendsCard() {
     final hasData = _trends != null && _trends!.labels.isNotEmpty;
     final hasNonZeroData = hasData &&
         (_trends!.income.any((v) => v > 0) ||
             _trends!.expense.any((v) => v > 0));
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '每日收支',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(height: 12),
-        if (!hasNonZeroData)
-          const Center(
-            child: Padding(
-              padding: EdgeInsets.symmetric(vertical: 32),
-              child: Column(
-                children: [
-                  Icon(Icons.show_chart, size: 48, color: Colors.grey),
-                  SizedBox(height: 8),
-                  Text(
-                    '该月暂无收支记录',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                '每日收支',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
-            ),
-          )
-        else ...[
-          SizedBox(
-            height: 240,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+              const Spacer(),
+              _buildLegendDot('收入', Colors.green[600]!),
+              const SizedBox(width: 12),
+              _buildLegendDot('支出', Colors.red[600]!),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (!hasNonZeroData)
+            Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: _BarChart(
-                  labels: _trends!.labels,
-                  incomeData: _trends!.income,
-                  expenseData: _trends!.expense,
-                  maxValue: [
-                    ..._trends!.income,
-                    ..._trends!.expense,
-                  ].fold<double>(0, (prev, e) => e > prev ? e : prev),
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Column(
+                  children: [
+                    Icon(Icons.show_chart,
+                        size: 44, color: Colors.grey[400]),
+                    const SizedBox(height: 8),
+                    Text(
+                      '该月暂无收支记录',
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            SizedBox(
+              height: 200,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: _BarChart(
+                    labels: _trends!.labels,
+                    incomeData: _trends!.income,
+                    expenseData: _trends!.expense,
+                    maxValue: [
+                      ..._trends!.income,
+                      ..._trends!.expense,
+                    ].fold<double>(0, (prev, e) => e > prev ? e : prev),
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _buildLegendItem('收入', Colors.green),
-              const SizedBox(width: 24),
-              _buildLegendItem('支出', Colors.red),
-            ],
-          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildLegendDot(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8,
+          height: 8,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[700])),
       ],
     );
   }
 
-  Widget _buildLegendItem(String label, Color color) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CircleAvatar(backgroundColor: color, radius: 6),
-        const SizedBox(width: 6),
-        Text(label),
-      ],
+  Widget _buildEmptyCard(String text, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.black.withValues(alpha: 0.06)),
+      ),
+      child: Center(
+        child: Column(
+          children: [
+            Icon(icon, size: 44, color: Colors.grey[400]),
+            const SizedBox(height: 8),
+            Text(text, style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+          ],
+        ),
+      ),
     );
   }
 
@@ -521,7 +767,7 @@ class PieChartPainter extends CustomPainter {
     final holePaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(center, radius * 0.45, holePaint);
+    canvas.drawCircle(center, radius * 0.55, holePaint);
   }
 
   @override
@@ -545,6 +791,7 @@ class _BarChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const double itemWidth = 40;
+    const double maxBarHeight = 130;
 
     return SizedBox(
       width: labels.length * itemWidth,
@@ -566,26 +813,26 @@ class _BarChart extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   Container(
-                    width: 12,
-                    height: 100 * incomeRatio,
+                    width: 10,
+                    height: maxBarHeight * incomeRatio,
                     decoration: BoxDecoration(
-                      color: Colors.green,
+                      color: Colors.green[600],
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 3),
                   Container(
-                    width: 12,
-                    height: 100 * expenseRatio,
+                    width: 10,
+                    height: maxBarHeight * expenseRatio,
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: Colors.red[600],
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     labels[i],
-                    style: const TextStyle(fontSize: 9),
+                    style: TextStyle(fontSize: 9, color: Colors.grey[600]),
                     textAlign: TextAlign.center,
                     maxLines: 1,
                   ),

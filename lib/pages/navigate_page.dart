@@ -5,7 +5,7 @@ import 'home_page.dart';
 import 'login_page.dart';
 import 'statistics_page.dart';
 
-/// 主导航页面：包含侧边栏和页面切换
+/// 主导航页面：底部 NavigationBar + 中央悬浮 FAB（添加记录）
 class NavigatePage extends StatefulWidget {
   const NavigatePage({super.key});
 
@@ -15,17 +15,12 @@ class NavigatePage extends StatefulWidget {
 
 class _NavigatePageState extends State<NavigatePage> {
   int _selectedIndex = 0;
+  final GlobalKey<HomePageState> _homeKey = GlobalKey<HomePageState>();
 
-  final _pages = const <Widget>[
-    HomePage(),
-    StatisticsPage(),
-    LoginPage(),
-  ];
-
-  final _drawerItems = const <Map<String, dynamic>>[
-    {'icon': Icons.home, 'title': '首页'},
-    {'icon': Icons.analytics, 'title': '统计'},
-    {'icon': Icons.people, 'title': '我的'},
+  late final List<Widget> _pages = [
+    HomePage(key: _homeKey),
+    const StatisticsPage(),
+    const LoginPage(),
   ];
 
   @override
@@ -44,87 +39,56 @@ class _NavigatePageState extends State<NavigatePage> {
     if (mounted) setState(() {});
   }
 
+  void _onAddPressed() {
+    // 切换到首页并通过 GlobalKey 触发首页内的添加弹窗，
+    // 复用首页已有的登录态判断、API/本地分发与列表刷新逻辑。
+    if (_selectedIndex != 0) {
+      setState(() => _selectedIndex = 0);
+    }
+    // 等当前帧渲染完再调用，确保 HomePage 已经 build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _homeKey.currentState?.openAddSheet();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final auth = AuthService.instance;
-
     return Scaffold(
-      appBar: AppBar(),
-      body: Center(
-        child: _pages[_selectedIndex],
+      extendBody: true,
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: _pages,
       ),
-      drawer: Drawer(
-        width: 240,
-        child: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 20),
-              CircleAvatar(
-                backgroundImage: auth.isLoggedIn && auth.userProfile != null
-                    ? const AssetImage('assets/images/me.png')
-                    : null,
-                radius: 50,
-                child: auth.isLoggedIn && auth.userProfile != null
-                    ? null
-                    : const Icon(Icons.person, size: 40),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                auth.isLoggedIn && auth.userProfile != null
-                    ? auth.userProfile!.username
-                    : '未登录',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (auth.isLoggedIn && auth.userProfile != null)
-                Text(
-                  auth.userProfile!.email,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey[600],
-                  ),
-                ),
-              const SizedBox(height: 20),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: _drawerItems.length,
-                  itemBuilder: (context, index) {
-                    final item = _drawerItems[index];
-                    return ListTile(
-                      leading: Icon(item['icon'] as IconData),
-                      title: Text(item['title'] as String),
-                      selected: _selectedIndex == index,
-                      onTap: () {
-                        setState(() {
-                          _selectedIndex = index;
-                        });
-                        Navigator.pop(context);
-                      },
-                    );
-                  },
-                ),
-              ),
-              if (auth.isLoggedIn)
-                ListTile(
-                  leading: const Icon(Icons.logout, color: Colors.red),
-                  title: const Text('退出登录',
-                      style: TextStyle(color: Colors.red)),
-                  onTap: () async {
-                    final messenger = ScaffoldMessenger.of(context);
-                    Navigator.pop(context);
-                    await auth.logout();
-                    if (!mounted) return;
-                    messenger.showSnackBar(
-                      const SnackBar(content: Text('已登出')),
-                    );
-                  },
-                ),
-              const SizedBox(height: 12),
-            ],
+      floatingActionButton: FloatingActionButton(
+        onPressed: _onAddPressed,
+        elevation: 4,
+        shape: const CircleBorder(),
+        tooltip: '添加记录',
+        child: const Icon(Icons.add, size: 30),
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) =>
+            setState(() => _selectedIndex = index),
+        height: 64,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: '首页',
           ),
-        ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: '统计',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: '我的',
+          ),
+        ],
       ),
     );
   }
