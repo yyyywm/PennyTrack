@@ -39,7 +39,9 @@
 ├── backend/               # FastAPI 后端源码
 │   ├── main.py            # 单文件应用：模型、路由、认证、统计
 │   ├── requirements.txt   # Python 依赖
+│   ├── Dockerfile         # Docker 镜像构建
 │   └── .env               # 本地环境变量（已 gitignore）
+├── docker-compose.yml     # 一键启动后端 + MySQL
 ├── assets/images/         # 应用图片资源
 ├── test/                  # Flutter 测试
 ├── pubspec.yaml
@@ -93,6 +95,62 @@ uvicorn main:app --reload --port 8000
 uvicorn main:app --host 0.0.0.0 --port 5300
 ```
 
+### Docker 部署
+
+项目已包含 `Dockerfile` 和 `docker-compose.yml`，支持一键启动后端 + MySQL。
+
+**1. 配置环境变量**
+
+```bash
+cp backend/.env.example backend/.env
+# 编辑 backend/.env，修改 BOOKKEEPING_SECRET_KEY
+```
+
+**2. 使用 Docker Compose 启动（推荐）**
+
+```bash
+# 一键启动后端 + MySQL
+docker-compose up -d
+
+# 查看日志
+docker-compose logs -f app
+
+# 停止服务
+docker-compose down
+
+# 停止并删除数据卷（谨慎使用）
+docker-compose down -v
+```
+
+Compose 会启动两个容器：
+- `bookkeeping-db` — MySQL 8.0，数据持久化到 `mysql_data` 卷
+- `bookkeeping-api` — FastAPI 应用，端口 `5300`
+
+**3. 仅构建/运行后端镜像（已有外部 MySQL）**
+
+```bash
+cd backend
+
+# 构建镜像
+docker build -t bookkeeping-api .
+
+# 运行容器
+docker run -d \
+  -p 5300:5300 \
+  -e PORT=5300 \
+  -e BOOKKEEPING_SECRET_KEY="your-secret-key" \
+  -e BOOKKEEPING_DATABASE_URL="mysql+pymysql://user:pass@host:3306/db" \
+  --name bookkeeping-api \
+  bookkeeping-api
+```
+
+**4. 健康检查**
+
+```bash
+# 检查后端是否正常运行
+curl http://localhost:5300/
+```
+
 ## 构建
 
 ```bash
@@ -126,5 +184,5 @@ flutter build appbundle
 
 - 后端地址配置在 `lib/services/api_service.dart` 中，支持自动探测模拟器/生产环境
 - 未登录时数据仅保存在本地，跨天自动清空；登录后数据持久化到云端
-- 后端默认连接云端 MySQL，开发环境未配置数据库时会回退到本地 SQLite
+- 后端强制使用 MySQL，启动时若未配置 `BOOKKEEPING_DATABASE_URL` 或连接失败会直接报错退出
 - CORS 在生产环境应指定具体域名，禁止通配符
