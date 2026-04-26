@@ -288,13 +288,6 @@ class HomePageState extends State<HomePage> {
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -338,12 +331,7 @@ class HomePageState extends State<HomePage> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Container(
-            height: 1,
-            color: Colors.black.withValues(alpha: 0.08),
-          ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           Row(
             children: [
               Expanded(
@@ -356,8 +344,8 @@ class HomePageState extends State<HomePage> {
               ),
               Container(
                 width: 1,
-                height: 36,
-                color: Colors.black.withValues(alpha: 0.08),
+                height: 32,
+                color: Colors.black.withValues(alpha: 0.06),
               ),
               Expanded(
                 child: _buildSummaryEntry(
@@ -456,20 +444,15 @@ class HomePageState extends State<HomePage> {
   // ========== 明细标题 ==========
   Widget _buildListHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          const Text(
-            '记账明细',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            '${_transactions.length} 笔',
-            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-          ),
-        ],
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Text(
+        '明细 · ${_transactions.length} 笔',
+        style: TextStyle(
+          fontSize: 12,
+          color: Colors.grey[600],
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }

@@ -61,7 +61,8 @@ class _NavigatePageState extends State<NavigatePage> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _onAddPressed,
-        elevation: 4,
+        elevation: 2,
+        highlightElevation: 4,
         shape: const CircleBorder(),
         tooltip: '添加记录',
         child: const Icon(Icons.add, size: 30),
@@ -70,23 +71,26 @@ class _NavigatePageState extends State<NavigatePage> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) =>
             setState(() => _selectedIndex = index),
-        height: 64,
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        height: 60,
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysHide,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.home_outlined),
             selectedIcon: Icon(Icons.home),
             label: '首页',
+            tooltip: '首页',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
             selectedIcon: Icon(Icons.analytics),
             label: '统计',
+            tooltip: '统计',
           ),
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
             label: '我的',
+            tooltip: '我的',
           ),
         ],
       ),

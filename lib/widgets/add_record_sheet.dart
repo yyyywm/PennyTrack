@@ -6,7 +6,9 @@ import '../models/transaction.dart';
 import '../services/api_service.dart';
 import '../services/auth_service.dart';
 import '../utils/icon_utils.dart';
+import '../utils/text_parser.dart';
 import '../utils/toast_utils.dart';
+import 'package:collection/collection.dart';
 
 /// 底部弹窗：添加或编辑记账记录
 class AddRecordSheet extends StatefulWidget {
@@ -22,6 +24,7 @@ class AddRecordSheet extends StatefulWidget {
 class _AddRecordSheetState extends State<AddRecordSheet> {
   final _amountController = TextEditingController();
   final _nameController = TextEditingController();
+  final _smartInputController = TextEditingController();
   Category? _selectedCategory;
   bool _isIncome = false;
   DateTime _selectedDate = DateTime.now();
@@ -106,6 +109,7 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
   void dispose() {
     _amountController.dispose();
     _nameController.dispose();
+    _smartInputController.dispose();
     super.dispose();
   }
 
@@ -161,6 +165,10 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
 
                     // 收入/支出切换（顶部）
                     _buildTypeToggle(),
+                    const SizedBox(height: 20),
+
+                    // 智能识别输入
+                    _buildSmartInput(),
                     const SizedBox(height: 20),
 
                     // 金额（放大）
@@ -248,15 +256,59 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
   // ========== 收支切换（置顶） ==========
   Widget _buildTypeToggle() {
     return Container(
+      height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.grey[100],
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Row(
+      child: Stack(
         children: [
-          Expanded(child: _toggleSegment(label: '支出', isSelected: !_isIncome, color: Colors.red[700]!, onTap: () => _setType(false))),
-          Expanded(child: _toggleSegment(label: '收入', isSelected: _isIncome, color: Colors.green[700]!, onTap: () => _setType(true))),
+          // 共享滑块：从左到右平滑滑动，避免两个独立动画互相打架
+          AnimatedAlign(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            alignment:
+                _isIncome ? Alignment.centerRight : Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: 0.5,
+              heightFactor: 1.0,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.08),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // 文字与点击区
+          Row(
+            children: [
+              Expanded(
+                child: _toggleSegment(
+                  label: '支出',
+                  isSelected: !_isIncome,
+                  color: Colors.red[700]!,
+                  onTap: () => _setType(false),
+                ),
+              ),
+              Expanded(
+                child: _toggleSegment(
+                  label: '收入',
+                  isSelected: _isIncome,
+                  color: Colors.green[700]!,
+                  onTap: () => _setType(true),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -270,30 +322,17 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          label,
+      behavior: HitTestBehavior.opaque,
+      child: Center(
+        child: AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutCubic,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: isSelected ? color : Colors.grey[600],
+            color: isSelected ? color : Colors.grey[600]!,
           ),
+          child: Text(label),
         ),
       ),
     );
@@ -301,10 +340,86 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
 
   void _setType(bool isIncome) {
     if (_isIncome == isIncome) return;
+    HapticFeedback.selectionClick();
     setState(() {
       _isIncome = isIncome;
       _selectedCategory = null;
     });
+  }
+
+  // ========== 智能输入 ==========
+  Widget _buildSmartInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionLabel('智能识别'),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _smartInputController,
+          decoration: InputDecoration(
+            hintText: '试试语音输入后粘贴，如"中午吃饭花了35"',
+            prefixIcon: const Icon(Icons.auto_awesome, color: Colors.amber),
+            suffixIcon: IconButton(
+              icon: const Icon(Icons.send),
+              onPressed: _onSmartInput,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _onSmartInput(),
+        ),
+      ],
+    );
+  }
+
+  void _onSmartInput() {
+    final text = _smartInputController.text.trim();
+    if (text.isEmpty) return;
+
+    final result = TextParser.parse(text);
+
+    if (!result.isValid) {
+      showCenterToast(
+        context: context,
+        message: '未能识别金额，请直接输入',
+        icon: Icons.info_outline,
+        backgroundColor: Colors.orange,
+      );
+      return;
+    }
+
+    setState(() {
+      _isIncome = result.isIncome;
+      _amountController.text = result.amount!.toStringAsFixed(2);
+
+      if (result.category != null && _categories.isNotEmpty) {
+        final matched = _categories.firstWhereOrNull(
+          (c) =>
+              c.name == result.category &&
+              c.type == (result.isIncome ? 'income' : 'expense'),
+        );
+        _selectedCategory = matched;
+      }
+
+      if (_nameController.text.trim().isEmpty || result.note.isNotEmpty) {
+        _nameController.text = result.note;
+      }
+    });
+
+    _smartInputController.clear();
+    FocusScope.of(context).unfocus();
+
+    showCenterToast(
+      context: context,
+      message:
+          '已识别: ${result.isIncome ? '收入' : '支出'} ¥${result.amount!.toStringAsFixed(2)}',
+      icon: Icons.check_circle_outline,
+      backgroundColor: Colors.green,
+    );
   }
 
   // ========== 金额输入（放大） ==========
