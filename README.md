@@ -36,13 +36,15 @@
 │   ├── services/          # 业务服务（API、认证、存储、同步）
 │   ├── utils/             # 工具函数（图标映射、Toast）
 │   └── widgets/           # 可复用组件（交易卡片、添加弹窗）
-├── backend/               # FastAPI 后端源码
-│   ├── main.py            # 单文件应用：模型、路由、认证、统计
-│   ├── requirements.txt   # Python 依赖
-│   ├── Dockerfile         # Docker 镜像构建
-│   └── .env               # 本地环境变量（已 gitignore）
-├── docker-compose.yml     # 一键启动后端 + MySQL
-├── assets/images/         # 应用图片资源
+├── backend/                 # FastAPI 后端源码
+│   ├── main.py              # 单文件应用：模型、路由、认证、统计
+│   ├── requirements.txt     # Python 依赖
+│   ├── Dockerfile           # 多阶段镜像构建（builder + runtime）
+│   ├── docker-compose.yml   # 单容器编排（仅后端，连接外部 MySQL）
+│   ├── .dockerignore
+│   ├── .env.example         # 环境变量模板
+│   └── .env                 # 本地环境变量（已 gitignore）
+├── assets/images/           # 应用图片资源
 ├── test/                  # Flutter 测试
 ├── pubspec.yaml
 ├── analysis_options.yaml  # Dart 静态分析配置
@@ -97,57 +99,63 @@ uvicorn main:app --host 0.0.0.0 --port 5300
 
 ### Docker 部署
 
-项目已包含 `Dockerfile` 和 `docker-compose.yml`，支持一键启动后端 + MySQL。
+`backend/` 目录下提供 `Dockerfile` 和 `docker-compose.yml`，部署形态为 **单容器**：只构建并运行 FastAPI 后端，**不会**启动任何数据库容器，应用通过 `BOOKKEEPING_DATABASE_URL` 连接你已有的外部 MySQL。
 
 **1. 配置环境变量**
 
 ```bash
 cp backend/.env.example backend/.env
-# 编辑 backend/.env，修改 BOOKKEEPING_SECRET_KEY
+# 编辑 backend/.env：
+#   BOOKKEEPING_SECRET_KEY     生产环境必须改成强随机字符串
+#   BOOKKEEPING_DATABASE_URL   填你已有的外部 MySQL，例如：
+#                              mysql+pymysql://user:pass@1.2.3.4:3306/bookkeeping
 ```
 
 **2. 使用 Docker Compose 启动（推荐）**
 
 ```bash
-# 一键启动后端 + MySQL
-docker-compose up -d
+cd backend
 
-# 查看日志
-docker-compose logs -f app
+# 构建并启动后端容器（仅一个容器）
+docker compose up -d --build
+
+# 查看日志（首次启动应看到 "Database connection verified successfully"）
+docker compose logs -f backend
 
 # 停止服务
-docker-compose down
-
-# 停止并删除数据卷（谨慎使用）
-docker-compose down -v
+docker compose down
 ```
 
-Compose 会启动两个容器：
-- `bookkeeping-db` — MySQL 8.0，数据持久化到 `mysql_data` 卷
-- `bookkeeping-api` — FastAPI 应用，端口 `5300`
+启动后只会出现 **一个** 容器：
+- `pennytrack-backend` — FastAPI 应用，镜像 `pennytrack-backend:latest`，宿主端口 `5300`
 
-**3. 仅构建/运行后端镜像（已有外部 MySQL）**
+启动时容器会做：①以指数退避方式 `SELECT 1` 验证外部 MySQL 连通性；②对缺失的表执行 `CREATE TABLE IF NOT EXISTS`（已存在则跳过，不破坏数据）。整个过程**不会创建新的 MySQL 容器**。
+
+**3. 仅用 `docker build` 手动构建（不走 compose）**
 
 ```bash
 cd backend
 
-# 构建镜像
-docker build -t bookkeeping-api .
+# 必须用 -t 显式打标签，否则会得到无名镜像
+docker build -t pennytrack-backend:latest .
 
-# 运行容器
+# 运行容器（环境变量与外部 MySQL 同上）
 docker run -d \
   -p 5300:5300 \
   -e PORT=5300 \
   -e BOOKKEEPING_SECRET_KEY="your-secret-key" \
   -e BOOKKEEPING_DATABASE_URL="mysql+pymysql://user:pass@host:3306/db" \
-  --name bookkeeping-api \
-  bookkeeping-api
+  --name pennytrack-backend \
+  pennytrack-backend:latest
 ```
 
 **4. 健康检查**
 
 ```bash
-# 检查后端是否正常运行
+# 轻量健康端点（compose healthcheck 也用此端点）
+curl http://localhost:5300/healthz
+
+# 包含数据库版本的根端点
 curl http://localhost:5300/
 ```
 
