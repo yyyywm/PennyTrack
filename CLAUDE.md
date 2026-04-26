@@ -22,6 +22,7 @@ This is a **full-stack** bookkeeping app (记账本) consisting of:
 | `dart format .` | Format all Dart code |
 | `flutter build apk` | Build Android APK |
 | `flutter build appbundle` | Build Android App Bundle |
+| `dart run flutter_launcher_icons` | Regenerate Android launcher icons from `assets/icon/icon.png` (must be run manually after the icon is changed; not invoked automatically by `flutter build`) |
 
 ### FastAPI Backend
 
