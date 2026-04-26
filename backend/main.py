@@ -224,9 +224,9 @@ def get_db():
 
 
 def month_end(year: int, month: int) -> datetime:
-    """返回指定年月最后一天的 23:59:59.999999，避免 datetime(year, 13, 1) 越界。"""
+    """返回指定年月最后一天的 23:59:59.999999（UTC naive），避免 datetime(year, 13, 1) 越界。"""
     last_day = calendar.monthrange(year, month)[1]
-    return datetime(year, month, last_day, 23, 59, 59, 999999)
+    return datetime(year, month, last_day, 23, 59, 59, 999999, tzinfo=timezone.utc).replace(tzinfo=None)
 
 
 def subtract_months(dt: datetime, months: int) -> datetime:
@@ -694,13 +694,23 @@ def get_category_stats(
     colors = []
     amounts = []
 
+    other_total = 0.0
     for cat_id, total in category_totals.items():
         category = category_map.get(cat_id)
         if category:
             labels.append(category.name)
-            values.append(round((total / total_expense) * 100, 1) if total_expense > 0 else 0)  # 百分比
-            colors.append(category.color)
+            values.append(round((total / total_expense) * 100, 1) if total_expense > 0 else 0)
+            colors.append(category.color if category.color else "gray")
             amounts.append(round(total, 2))
+        else:
+            # 分类已被删除，金额合并到"其他"
+            other_total += total
+
+    if other_total > 0:
+        labels.append("其他")
+        values.append(round((other_total / total_expense) * 100, 1) if total_expense > 0 else 0)
+        colors.append("gray")
+        amounts.append(round(other_total, 2))
 
     return {
         "labels": labels,
@@ -714,20 +724,28 @@ def get_category_stats(
     }
 
 
+def _local_date(year: int, month: int, day: int, hour: int = 0, minute: int = 0, second: int = 0, microsecond: int = 0, tz: timezone = timezone.utc) -> datetime:
+    """用用户本地时区构造日期，再转成 UTC naive 存入查询条件。"""
+    dt = datetime(year, month, day, hour, minute, second, microsecond, tzinfo=tz)
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 @app.get("/trends/")
 def get_trends(
         period: str = "month",  # day, month, quarter, year
         year: Optional[int] = None,
         month: Optional[int] = None,
+        timezone_offset: Optional[int] = None,
         db: Session = Depends(get_db),
         current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
-    """获取收支趋势数据"""
+    """获取收支趋势数据。timezone_offset 为客户端时区偏移分钟数（如东八区为 480）。"""
     valid_periods = {"day", "month", "quarter", "year"}
     if period not in valid_periods:
         raise HTTPException(status_code=400, detail=f"无效的 period 参数，可选值: {', '.join(valid_periods)}")
 
     today = utc_now()
+    user_tz = timezone(timedelta(minutes=timezone_offset or 0))
 
     # 根据周期确定时间范围
     if period == "day":
@@ -737,14 +755,14 @@ def get_trends(
             month = today.month
         _, days_in_month = calendar.monthrange(year, month)
         labels = [f"{d}日" for d in range(1, days_in_month + 1)]
-        start_dates = [datetime(year, month, d) for d in range(1, days_in_month + 1)]
-        end_dates = [datetime(year, month, d, 23, 59, 59, 999999) for d in range(1, days_in_month + 1)]
+        start_dates = [_local_date(year, month, d, tz=user_tz) for d in range(1, days_in_month + 1)]
+        end_dates = [_local_date(year, month, d, 23, 59, 59, 999999, tz=user_tz) for d in range(1, days_in_month + 1)]
 
     elif period == "month":
         # 如果指定了年月，只查询该月
         if year is not None and month is not None:
             labels = [f"{year}年{month}月"]
-            start_dates = [datetime(year, month, 1)]
+            start_dates = [_local_date(year, month, 1, tz=user_tz)]
             end_dates = [month_end(year, month)]
         else:
             # 过去6个月（默认行为，兼容旧版）
@@ -761,7 +779,7 @@ def get_trends(
                     y -= 1
 
                 labels.append(f"{y}年{m}月")
-                start_dates.append(datetime(y, m, 1))
+                start_dates.append(_local_date(y, m, 1, tz=user_tz))
                 end_dates.append(month_end(y, m))
 
     elif period == "quarter":
@@ -782,7 +800,7 @@ def get_trends(
             end_month = start_month + 2
 
             labels.append(f"{year}年Q{current_quarter + 1}")
-            start_dates.append(datetime(year, start_month, 1))
+            start_dates.append(_local_date(year, start_month, 1, tz=user_tz))
             # 使用 month_end 避免 end_month + 1 = 13 时越界
             end_dates.append(month_end(year, end_month))
 
@@ -801,7 +819,7 @@ def get_trends(
                 year -= 1
 
             labels.append(f"{year}年{month}月")
-            start_dates.append(datetime(year, month, 1))
+            start_dates.append(_local_date(year, month, 1, tz=user_tz))
             end_dates.append(month_end(year, month))
 
     # 按时间范围查询数据

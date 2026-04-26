@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_service.dart';
+import 'storage_service.dart';
 import 'sync_service.dart';
 
 /// 全局认证状态管理（单例）
@@ -155,6 +156,10 @@ class AuthService extends ChangeNotifier {
     await prefs.remove(_usernameKey);
 
     ApiService.clearAuthToken();
+
+    // 清空本地离线缓存，避免已同步数据在下次登录时重复上传
+    await StorageService.clearAllLocalItems();
+
     notifyListeners();
   }
 }

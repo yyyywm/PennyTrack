@@ -413,12 +413,16 @@ class ApiService {
     String period = 'month',
     int? year,
     int? month,
+    int? timezoneOffset,
   }) async {
     await _ensureBaseUrl();
     try {
       final params = <String, dynamic>{'period': period};
       if (year != null) params['year'] = year;
       if (month != null) params['month'] = month;
+      if (timezoneOffset != null) {
+        params['timezone_offset'] = timezoneOffset;
+      }
       final response = await dio.get(
         '/trends/',
         queryParameters: params,

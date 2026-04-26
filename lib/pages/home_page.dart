@@ -114,10 +114,9 @@ class _HomePageState extends State<HomePage> {
     final auth = AuthService.instance;
 
     if (auth.isLoggedIn) {
-      final created = await ApiService.createTransaction(newItem);
-      if (created != null) {
-        await StorageService.addItem(created);
-      }
+      await ApiService.createTransaction(newItem);
+      // 登录状态下数据已同步到后端，不再保存到本地缓存，
+      // 避免退出登录后再次同步导致重复上传
     } else {
       await StorageService.addItem(newItem);
     }

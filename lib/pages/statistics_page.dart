@@ -44,9 +44,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
     final auth = AuthService.instance;
     if (auth.isLoggedIn) {
-      final startOfMonth = DateTime.utc(_currentMonth.year, _currentMonth.month, 1);
-      final endOfMonth = DateTime.utc(_currentMonth.year, _currentMonth.month + 1, 1)
-          .subtract(const Duration(microseconds: 1));
+      // 使用本地时间的月初/月末再转 UTC，确保按用户所在时区统计
+      final startOfMonth = DateTime(_currentMonth.year, _currentMonth.month, 1).toUtc();
+      final endOfMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1)
+          .subtract(const Duration(microseconds: 1))
+          .toUtc();
 
       final summary = await ApiService.getSummary(
         startDate: startOfMonth,
@@ -60,6 +62,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         period: 'day',
         year: _currentMonth.year,
         month: _currentMonth.month,
+        timezoneOffset: DateTime.now().timeZoneOffset.inMinutes,
       );
 
       if (mounted) {
@@ -357,17 +360,20 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 size: const Size(200, 200),
                 painter: PieChartPainter(
                   values: _categoryStats!.values,
-                  colors: _categoryStats!.colors.map(_colorFromString).toList(),
+                  colors: _safeColors(_categoryStats!.colors, _categoryStats!.values.length)
+                      .map(_colorFromString)
+                      .toList(),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 16),
           ...List.generate(_categoryStats!.labels.length, (i) {
+            final safeColors = _safeColors(_categoryStats!.colors, _categoryStats!.labels.length);
             return ListTile(
               dense: true,
               leading: CircleAvatar(
-                backgroundColor: _colorFromString(_categoryStats!.colors[i]),
+                backgroundColor: _colorFromString(safeColors[i]),
                 radius: 8,
               ),
               title: Text(_categoryStats!.labels[i]),
@@ -456,6 +462,14 @@ class _StatisticsPageState extends State<StatisticsPage> {
         Text(label),
       ],
     );
+  }
+
+  /// 确保 colors 列表长度与数据项一致，避免数组越界
+  List<String> _safeColors(List<String> colors, int targetLength) {
+    if (colors.length >= targetLength) {
+      return colors.sublist(0, targetLength);
+    }
+    return [...colors, ...List.filled(targetLength - colors.length, 'blue')];
   }
 
   Color _colorFromString(String? colorName) {
