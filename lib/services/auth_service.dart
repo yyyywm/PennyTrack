@@ -55,6 +55,11 @@ class AuthService extends ChangeNotifier {
     if (isLoggedIn) {
       ApiService.setAuthToken(_token!);
       await _fetchUserProfile();
+      // _fetchUserProfile 可能因 401 触发 logout，同步前必须重新检查
+      if (!isLoggedIn) {
+        notifyListeners();
+        return;
+      }
       // 应用启动后若已登录，尝试同步上次未上传的本地记录
       try {
         _lastSyncResult = await SyncService.syncLocalToBackend();
