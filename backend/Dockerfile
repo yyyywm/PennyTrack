@@ -1,14 +1,29 @@
-# 使用官方 Python 轻量镜像
+# ===== Stage 1: builder =====
+# 单独的构建阶段用于编译 Python 依赖（cryptography 等可能需要编译工具链）
+FROM python:3.11-slim AS builder
+
+# 安装编译期所需的系统依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# 使用独立 venv 便于整个目录拷贝到最终镜像
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+
+# ===== Stage 2: runtime =====
 FROM python:3.11-slim
 
-# 设置工作目录
+# 拷贝构建好的虚拟环境，最终镜像不再包含 build-essential
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 WORKDIR /app
-
-# 先复制依赖文件，利用 Docker 缓存层
-COPY requirements.txt .
-
-# 安装依赖
-RUN pip install --no-cache-dir -r requirements.txt
 
 # 复制应用代码
 COPY main.py .
@@ -21,5 +36,7 @@ USER appuser
 ENV PORT=8000
 EXPOSE ${PORT}
 
-# 启动命令
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}
+# 使用 sh -c + exec 形式：
+#   - sh -c 让 ${PORT} 在运行时展开
+#   - exec 让 uvicorn 取代 sh 成为 PID 1，docker stop 发出的 SIGTERM 才能被正确接收并优雅停机
+CMD ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port ${PORT}"]

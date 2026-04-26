@@ -11,13 +11,16 @@ from sqlalchemy.orm import sessionmaker, Session, relationship
 import calendar
 import enum
 import os
+import time
 import uvicorn
 from dotenv import load_dotenv
 from sqlalchemy import text
 from typing import List, Optional, Dict, Any
 import re
 
-# 自动加载同目录下的 .env 文件（仅本地开发使用，生产环境通过系统环境变量注入）
+# 加载 .env：仅本地裸跑（python main.py / uvicorn --reload）时生效。
+# 通过 docker-compose 启动时 .env 已被 .dockerignore 排除，依赖 compose 的
+# `env_file:` 把变量注入容器，这里 load_dotenv 找不到文件会静默 no-op，无副作用。
 load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
 
 # 配置（生产环境必须通过环境变量设置，避免敏感信息泄露到版本控制）
@@ -46,14 +49,35 @@ engine = create_engine(
     pool_recycle=3600,
 )
 
-# 启动时立即验证数据库连通性，避免在请求时才暴露连接问题
-try:
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    print("Database connection verified successfully.")
-except Exception as e:
-    print(f"ERROR: Failed to connect to MySQL database: {e}")
-    raise RuntimeError(f"Database connection failed: {e}")
+# 启动时验证数据库连通性，使用指数退避避免容器秒挂刷日志
+# 适用场景：MySQL 短暂不可达 / Docker 启动时序问题 / 网络抖动
+DB_CONNECT_MAX_RETRIES = int(os.environ.get("BOOKKEEPING_DB_CONNECT_MAX_RETRIES", "5"))
+DB_CONNECT_INITIAL_DELAY = float(os.environ.get("BOOKKEEPING_DB_CONNECT_INITIAL_DELAY", "2"))
+
+
+def _verify_database_connection() -> None:
+    delay = DB_CONNECT_INITIAL_DELAY
+    last_error: Optional[Exception] = None
+    for attempt in range(1, DB_CONNECT_MAX_RETRIES + 1):
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print(f"Database connection verified successfully (attempt {attempt}).")
+            return
+        except Exception as e:
+            last_error = e
+            print(
+                f"WARN: DB connection attempt {attempt}/{DB_CONNECT_MAX_RETRIES} failed: {e}"
+            )
+            if attempt < DB_CONNECT_MAX_RETRIES:
+                print(f"      retrying in {delay:.1f}s...")
+                time.sleep(delay)
+                delay = min(delay * 2, 30)  # 指数退避，封顶 30s
+    print(f"ERROR: Failed to connect to MySQL database after {DB_CONNECT_MAX_RETRIES} attempts.")
+    raise RuntimeError(f"Database connection failed: {last_error}")
+
+
+_verify_database_connection()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -815,6 +839,13 @@ def get_trends(
         "income": income_data,
         "expense": expense_data
     }
+
+
+@app.get("/healthz")
+async def healthz():
+    """轻量存活探针：不查库，仅证明进程已起、事件循环可响应。
+    docker-compose 的 healthcheck 使用此端点，避免每 30s 多一次 DB 查询。"""
+    return {"status": "ok"}
 
 
 @app.get("/")
