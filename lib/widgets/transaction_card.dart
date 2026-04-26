@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/transaction.dart';
+import '../utils/icon_utils.dart';
 import 'add_record_sheet.dart';
 
 /// 单条交易记录的卡片组件
@@ -29,7 +30,7 @@ class TransactionCard extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                IconData(transaction.iconCodePoint, fontFamily: 'MaterialIcons'),
+                codePointToIconData(transaction.iconCodePoint, transaction.isIncome),
                 size: 28,
               ),
               const SizedBox(width: 12),

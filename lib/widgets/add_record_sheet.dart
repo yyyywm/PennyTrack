@@ -207,10 +207,7 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
                                 child: Row(
                                   children: [
                                     Icon(
-                                      IconData(
-                                        iconNameToCodePoint(category.icon, _isIncome),
-                                        fontFamily: 'MaterialIcons',
-                                      ),
+                                      iconNameToIconData(category.icon, _isIncome),
                                       size: 20,
                                     ),
                                     const SizedBox(width: 8),
