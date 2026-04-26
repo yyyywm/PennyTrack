@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置
+  - 默认仍然允许明文 HTTP（兼容生产 IP+5300 端口的明文接口）
+  - 显式将后端 IP 加入明文白名单，规避 ColorOS / MIUI / OriginOS
+    等国内厂商对 usesCleartextTraffic 全局开关的额外拦截
+  - 显式信任系统证书与用户证书（用户证书仅 debug 模式下生效，
+    便于使用抓包工具排查问题）
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">YOUR_SERVER_IP</domain>
+        <domain includeSubdomains="true">10.0.2.2</domain>
+        <domain includeSubdomains="true">localhost</domain>
+    </domain-config>
+
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>

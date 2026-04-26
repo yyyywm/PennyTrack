@@ -145,9 +145,47 @@ class ApiService {
       );
       return UserProfile.fromJson(response.data);
     } on DioException catch (e) {
-      print('Register failed: ${e.response?.data}');
-      final detail = e.response?.data?['detail'] ?? '注册失败，请检查网络连接';
-      throw Exception(detail);
+      // 按异常类型给出可定位的错误信息，避免一律提示"请检查网络连接"
+      // 而掩盖真实失败原因（厂商防火墙拦截、TLS 失败、DNS 失败等）
+      print('Register failed: type=${e.type} '
+          'msg=${e.message} '
+          'baseUrl=$_baseUrl '
+          'resp=${e.response?.data}');
+      throw Exception(_describeDioError(e, '注册'));
+    } catch (e) {
+      print('Register failed (non-dio): $e');
+      throw Exception('注册失败：$e');
+    }
+  }
+
+  /// 把 DioException 映射成对用户友好的中文提示，
+  /// 同时保留足够的诊断细节用于线上排错。
+  static String _describeDioError(DioException e, String action) {
+    if (e.response != null) {
+      final detail = e.response?.data is Map
+          ? (e.response!.data as Map)['detail']
+          : null;
+      if (detail != null) return detail.toString();
+      return '$action失败：服务器返回 ${e.response?.statusCode}';
+    }
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+        return '$action失败：连接服务器超时，请检查网络或稍后重试';
+      case DioExceptionType.sendTimeout:
+        return '$action失败：请求发送超时';
+      case DioExceptionType.receiveTimeout:
+        return '$action失败：服务器响应超时';
+      case DioExceptionType.badCertificate:
+        return '$action失败：服务器证书校验失败';
+      case DioExceptionType.connectionError:
+        return '$action失败：无法连接服务器（${e.message ?? "网络不可达"}）。'
+            '若手机首次安装请在系统设置中允许本应用联网';
+      case DioExceptionType.cancel:
+        return '$action已取消';
+      case DioExceptionType.badResponse:
+        return '$action失败：服务器响应异常 ${e.response?.statusCode}';
+      case DioExceptionType.unknown:
+        return '$action失败：${e.message ?? e.error ?? "未知错误"}';
     }
   }
 
