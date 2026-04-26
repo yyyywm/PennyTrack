@@ -30,21 +30,30 @@ if not SECRET_KEY:
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# 数据库配置
+# 数据库配置（强制使用 MySQL，不再回退到 SQLite）
 SQLALCHEMY_DATABASE_URL = os.environ.get("BOOKKEEPING_DATABASE_URL")
 if not SQLALCHEMY_DATABASE_URL:
-    print("WARNING: BOOKKEEPING_DATABASE_URL not set. Using local SQLite for development.")
-    SQLALCHEMY_DATABASE_URL = "sqlite:///./bookkeeping_dev.db"
-# SQLite 不支持连接池，仅在非 SQLite 时启用连接池配置
-_engine_kwargs = {}
-if not SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
-    _engine_kwargs = {
-        "pool_size": 10,
-        "max_overflow": 20,
-        "pool_pre_ping": True,
-        "pool_recycle": 3600,
-    }
-engine = create_engine(SQLALCHEMY_DATABASE_URL, **_engine_kwargs)
+    print("ERROR: BOOKKEEPING_DATABASE_URL environment variable is not set.")
+    print("       This application requires a MySQL database connection.")
+    print("       Example: mysql+pymysql://user:password@host:port/dbname")
+    raise RuntimeError("BOOKKEEPING_DATABASE_URL is required")
+
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
+
+# 启动时立即验证数据库连通性，避免在请求时才暴露连接问题
+try:
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
+    print("Database connection verified successfully.")
+except Exception as e:
+    print(f"ERROR: Failed to connect to MySQL database: {e}")
+    raise RuntimeError(f"Database connection failed: {e}")
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
