@@ -10,6 +10,9 @@ services:
     ports:
       # 如果前置有反向代理（nginx/Caddy），可改为 "127.0.0.1:5300:5300" 防止绕过反代直连
       - "5300:5300"
+    volumes:
+      # 挂载宿主机代码，修改后无需重新构建镜像，restart 即可生效
+      - ./main.py:/app/main.py:ro
     # 资源上限，防止内存泄漏拖垮宿主（非 swarm 模式下使用 mem_limit/cpus 兼容字段）
     mem_limit: 512m
     mem_reservation: 128m
