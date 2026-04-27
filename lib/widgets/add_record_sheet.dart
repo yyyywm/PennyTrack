@@ -259,57 +259,49 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
       height: 44,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: Colors.grey[100],
+        color: Colors.grey[200],
         borderRadius: BorderRadius.circular(14),
       ),
-      child: Stack(
-        children: [
-          // 共享滑块：从左到右平滑滑动，避免两个独立动画互相打架
-          AnimatedAlign(
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            alignment:
-                _isIncome ? Alignment.centerRight : Alignment.centerLeft,
-            child: FractionallySizedBox(
-              widthFactor: 0.5,
-              heightFactor: 1.0,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.08),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          // 文字与点击区
-          Row(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final halfWidth = constraints.maxWidth / 2;
+          return Stack(
             children: [
-              Expanded(
-                child: _toggleSegment(
-                  label: '支出',
-                  isSelected: !_isIncome,
-                  color: Colors.red[700]!,
-                  onTap: () => _setType(false),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOutCubic,
+                left: _isIncome ? halfWidth : 0,
+                top: 0,
+                width: halfWidth,
+                height: constraints.maxHeight,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: _isIncome ? Colors.green[600] : Colors.red[600],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
-              Expanded(
-                child: _toggleSegment(
-                  label: '收入',
-                  isSelected: _isIncome,
-                  color: Colors.green[700]!,
-                  onTap: () => _setType(true),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _toggleSegment(
+                      label: '支出',
+                      isSelected: !_isIncome,
+                      onTap: () => _setType(false),
+                    ),
+                  ),
+                  Expanded(
+                    child: _toggleSegment(
+                      label: '收入',
+                      isSelected: _isIncome,
+                      onTap: () => _setType(true),
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
-        ],
+          );
+        },
       ),
     );
   }
@@ -317,22 +309,26 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
   Widget _toggleSegment({
     required String label,
     required bool isSelected,
-    required Color color,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Center(
-        child: AnimatedDefaultTextStyle(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutCubic,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: isSelected ? color : Colors.grey[600]!,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        splashColor: Colors.white.withValues(alpha: 0.25),
+        highlightColor: Colors.white.withValues(alpha: 0.15),
+        child: Center(
+          child: AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOutCubic,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: isSelected ? Colors.white : Colors.grey[600],
+            ),
+            child: Text(label),
           ),
-          child: Text(label),
         ),
       ),
     );
