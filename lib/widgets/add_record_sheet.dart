@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -30,6 +32,7 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
   DateTime _selectedDate = DateTime.now();
   List<Category> _categories = [];
   bool _isLoadingCategories = false;
+  Timer? _debounceTimer;
 
   bool get _isEdit => widget.transaction != null;
 
@@ -37,6 +40,7 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
   void initState() {
     super.initState();
     _loadCategories();
+    _smartInputController.addListener(_onSmartInputChanged);
 
     if (_isEdit) {
       final t = widget.transaction!;
@@ -45,6 +49,13 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
       _isIncome = t.isIncome;
       _selectedDate = t.date;
     }
+  }
+
+  void _onSmartInputChanged() {
+    _debounceTimer?.cancel();
+    final text = _smartInputController.text.trim();
+    if (text.isEmpty) return;
+    _debounceTimer = Timer(const Duration(seconds: 1), _onSmartInput);
   }
 
   Future<void> _loadCategories() async {
@@ -107,6 +118,7 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _amountController.dispose();
     _nameController.dispose();
     _smartInputController.dispose();
@@ -353,12 +365,8 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
         TextField(
           controller: _smartInputController,
           decoration: InputDecoration(
-            hintText: '试试语音输入后粘贴，如"中午吃饭花了35"',
+            hintText: '语音输入后粘贴，停输1秒自动识别',
             prefixIcon: const Icon(Icons.auto_awesome, color: Colors.amber),
-            suffixIcon: IconButton(
-              icon: const Icon(Icons.send),
-              onPressed: _onSmartInput,
-            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
             ),
@@ -366,7 +374,6 @@ class _AddRecordSheetState extends State<AddRecordSheet> {
                 const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
           ),
           textInputAction: TextInputAction.done,
-          onSubmitted: (_) => _onSmartInput(),
         ),
       ],
     );
