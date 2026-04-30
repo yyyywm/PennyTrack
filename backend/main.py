@@ -31,7 +31,7 @@ if not SECRET_KEY:
     SECRET_KEY = "dev-insecure-secret-do-not-use-in-production"
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 10080
 
 # 数据库配置（强制使用 MySQL，不再回退到 SQLite）
 SQLALCHEMY_DATABASE_URL = os.environ.get("BOOKKEEPING_DATABASE_URL")
