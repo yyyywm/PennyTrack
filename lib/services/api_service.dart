@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' hide Category;
 
+import '../config/api_config.dart';
 import '../models/category.dart';
 import '../models/transaction.dart';
 import '../utils/icon_utils.dart';
@@ -10,10 +11,10 @@ import '../utils/icon_utils.dart';
 /// 提供完整的 HTTP 通信、JWT 认证、所有业务 API 封装。
 class ApiService {
   /// 生产服务器地址
-  static const String _productionUrl = 'http://YOUR_SERVER_IP:5300';
+  static const String _productionUrl = ApiConfig.productionUrl;
 
   /// Android 模拟器访问宿主机 localhost 的地址
-  static const String _emulatorUrl = 'http://10.0.2.2:5300';
+  static const String _emulatorUrl = ApiConfig.emulatorUrl;
 
   static String _baseUrl = _productionUrl;
   static bool _urlResolved = false;
