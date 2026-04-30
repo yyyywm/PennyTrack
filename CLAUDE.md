@@ -41,6 +41,9 @@ This is a **full-stack** bookkeeping app (记账本) consisting of:
 ```
 lib/
 ├── main.dart              # App entry point, theme config
+├── config/
+│   ├── api_config.dart         # Backend URL config (gitignored, copy from template)
+│   └── api_config.template.dart # Template for users to set up their own backend
 ├── models/
 │   ├── category.dart      # Category data model
 │   └── transaction.dart   # Transaction data model
@@ -54,8 +57,9 @@ lib/
 │   ├── api_service.dart   # Dio HTTP client, all backend APIs
 │   ├── auth_service.dart  # Singleton: token persistence, login/logout
 │   ├── storage_service.dart # SharedPreferences CRUD, daily auto-cleanup
-│   └── sync_service.dart  # Local-to-backend batch sync on login
+│   └── sync_service.dart  # Local-to-backend batch sync on login (mutex-protected)
 ├── utils/
+│   ├── text_parser.dart   # Natural language parsing: amount, type, category, note
 │   ├── icon_utils.dart    # Backend icon name -> MaterialIcons codePoint
 │   └── toast_utils.dart   # showCenterToast() overlay helper
 └── widgets/
@@ -72,7 +76,12 @@ backend/
 └── .env                 # Local env vars (ignored by git)
 ```
 
-Backend is a monolithic `main.py` using synchronous SQLAlchemy with MySQL (`mysql+pymysql`), with SQLite fallback for local development.
+Backend is a monolithic `main.py` using synchronous SQLAlchemy with MySQL (`mysql+pymysql`).
+
+Key backend features:
+- **Token expiration**: JWT access tokens expire after **7 days** (`ACCESS_TOKEN_EXPIRE_MINUTES = 10080`), reducing re-authentication frequency for mobile users
+- **Startup MD5 checksum**: On every startup, the backend computes and prints the first 8 chars of `main.py`'s MD5 digest, enabling operators to verify code updates via `docker logs`
+- **Docker volume mount**: `docker-compose.yml` mounts `./main.py` as read-only into the container, so code changes take effect on restart without rebuilding the image. `PYTHONDONTWRITEBYTECODE=1` prevents stale `.pyc` caches
 
 ### API Endpoints
 
@@ -104,7 +113,8 @@ UI authentication state is managed via `AuthService` (singleton `ChangeNotifier`
 
 - `HomePage` loads from `ApiService.getTransactions()` when logged in, or `StorageService.loadTodayItems()` when offline.
 - Adding a record: if logged in -> API create -> refresh list; if offline -> local storage -> refresh list.
-- `SyncService.syncLocalToBackend()` is called on login to upload offline records, then clears local cache.
+- **Smart input**: `AddRecordSheet` includes a "Smart Recognition" text field. After 1s debounce, `TextParser.parse()` extracts amount, income/expense type, category, and note from natural language (e.g., "打车26", "工资8500"). Uses priority-ranked regex pipeline with negation filtering.
+- `SyncService.syncLocalToBackend()` is called on login to upload offline records, then clears local cache. Uses a `Completer`-based mutex to prevent concurrent sync executions and duplicate uploads.
 - `StorageService` persists JSON to `SharedPreferences` under `menu_items_today` and auto-clears when the date changes.
 
 ### Assets
@@ -144,3 +154,5 @@ Tests are in `test/widget_test.dart`. After refactoring, the tests verify the ap
 - The app is configured for Android only. Other platform directories were removed.
 - `SystemChrome.setSystemUIOverlayStyle` is called in `main()` to configure the status bar.
 - `ApiService` auto-detects Android emulator (`10.0.2.2`) vs production URL to minimize connection wait time.
+- **Backend URL configuration**: Production and emulator URLs are defined in `lib/config/api_config.dart` (gitignored). New developers should copy `api_config.template.dart` to `api_config.dart` and fill in their own server address.
+- **Network security for domestic ROMs**: `AndroidManifest.xml` sets `usesCleartextTraffic="true"` and references `network_security_config.xml`, which explicitly whitelists the production server, `10.0.2.2`, and `localhost` for cleartext traffic. This is necessary because ColorOS, MIUI, and other domestic OEM ROMs may ignore or override the global cleartext flag. The config also includes `debug-overrides` for packet capture tools.
