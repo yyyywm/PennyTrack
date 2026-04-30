@@ -79,6 +79,22 @@ def _verify_database_connection() -> None:
 
 _verify_database_connection()
 
+
+def _print_code_checksum() -> None:
+    """启动时打印当前 main.py 的 MD5 短哈希，方便通过 docker logs 确认代码版本是否已更新。"""
+    import hashlib
+
+    main_path = os.path.abspath(__file__)
+    try:
+        with open(main_path, "rb") as f:
+            digest = hashlib.md5(f.read()).hexdigest()[:8]
+        print(f"[version] main.py checksum: {digest}")
+    except Exception as e:
+        print(f"[version] failed to compute checksum: {e}")
+
+
+_print_code_checksum()
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
