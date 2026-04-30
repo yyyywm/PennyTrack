@@ -20,7 +20,8 @@ This is a **full-stack** bookkeeping app (记账本) consisting of:
 | `flutter test test/widget_test.dart` | Run a specific test file |
 | `flutter analyze` | Run static analysis |
 | `dart format .` | Format all Dart code |
-| `flutter build apk` | Build Android APK |
+| `dart run scripts/build_apk.dart` | Build Android APK with auto IP injection + restore |
+| `flutter build apk` | Build Android APK (manual, ensure XML IP is correct) |
 | `flutter build appbundle` | Build Android App Bundle |
 | `dart run flutter_launcher_icons` | Regenerate Android launcher icons from `assets/icon/icon.png` (must be run manually after the icon is changed; not invoked automatically by `flutter build`) |
 
@@ -155,4 +156,5 @@ Tests are in `test/widget_test.dart`. After refactoring, the tests verify the ap
 - `SystemChrome.setSystemUIOverlayStyle` is called in `main()` to configure the status bar.
 - `ApiService` auto-detects Android emulator (`10.0.2.2`) vs production URL to minimize connection wait time.
 - **Backend URL configuration**: Production and emulator URLs are defined in `lib/config/api_config.dart` (gitignored). New developers should copy `api_config.template.dart` to `api_config.dart` and fill in their own server address.
+- **Build automation**: `scripts/build_apk.dart` wraps `flutter build apk` and automatically injects the real server IP from `api_config.dart` into `network_security_config.xml` before building, then restores the `YOUR_SERVER_IP` placeholder afterward. This prevents accidental IP leaks in Git while ensuring the APK works on ColorOS/MIUI.
 - **Network security for domestic ROMs**: `AndroidManifest.xml` sets `usesCleartextTraffic="true"` and references `network_security_config.xml`, which explicitly whitelists the production server, `10.0.2.2`, and `localhost` for cleartext traffic. This is necessary because ColorOS, MIUI, and other domestic OEM ROMs may ignore or override the global cleartext flag. The config also includes `debug-overrides` for packet capture tools.

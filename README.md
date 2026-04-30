@@ -168,11 +168,35 @@ curl http://localhost:5300/
 
 ## 构建
 
-```bash
-# Android APK
-flutter build apk
+### 配置后端地址
 
-# Android App Bundle
+首次克隆或首次构建前，需要配置你自己的后端地址：
+
+```bash
+# 1. 复制配置文件模板
+cp lib/config/api_config.template.dart lib/config/api_config.dart
+
+# 2. 编辑 lib/config/api_config.dart，填入你的服务器 IP
+```
+
+### Android APK
+
+项目提供了自动注入脚本，构建前会将 `api_config.dart` 中的真实 IP 自动写入 `network_security_config.xml`（ColorOS/MIUI 等 ROM 必需），构建完成后自动恢复占位符，避免 IP 意外提交到 Git。
+
+```bash
+# 推荐：使用包装脚本（自动注入 + 构建 + 恢复）
+dart run scripts/build_apk.dart
+
+# 构建 Release 版
+dart run scripts/build_apk.dart --release
+
+# 或直接运行 flutter build（需手动确保 XML 中 IP 正确）
+flutter build apk
+```
+
+### Android App Bundle
+
+```bash
 flutter build appbundle
 ```
 
