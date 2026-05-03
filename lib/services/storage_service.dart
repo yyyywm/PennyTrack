@@ -11,6 +11,12 @@ class StorageService {
   static const String _keyMenuItems = 'menu_items_today';
   static const String _keyLastClearDate = 'last_clear_date';
 
+  /// 提醒功能：开关
+  static const String _keyReminderEnabled = 'reminder_enabled';
+
+  /// 提醒功能：时间点列表（格式 "HH:MM"，例如 ["09:00", "21:30"]）
+  static const String _keyReminderTimes = 'reminder_times';
+
   /// 加载今天的项目（首次加载当天数据时，若日期变化则清空旧数据）
   static Future<List<Transaction>> loadTodayItems() async {
     try {
@@ -88,5 +94,41 @@ class StorageService {
   /// 获取今天的日期字符串（格式：2025-09-21）
   static String _getTodayString() {
     return DateTime.now().toIso8601String().split('T')[0];
+  }
+
+  // ========== 每日提醒配置 ==========
+
+  /// 提醒总开关是否开启（默认 false）
+  static Future<bool> isReminderEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyReminderEnabled) ?? false;
+  }
+
+  /// 设置提醒总开关
+  static Future<void> setReminderEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyReminderEnabled, enabled);
+  }
+
+  /// 加载所有提醒时间点（按 "HH:MM" 字典序升序）
+  static Future<List<String>> loadReminderTimes() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getStringList(_keyReminderTimes) ?? const <String>[];
+    final valid = raw.where(_isValidTimeString).toSet().toList();
+    valid.sort();
+    return valid;
+  }
+
+  /// 保存提醒时间点列表（自动去重 + 校验 + 排序）
+  static Future<void> saveReminderTimes(List<String> times) async {
+    final prefs = await SharedPreferences.getInstance();
+    final cleaned = times.where(_isValidTimeString).toSet().toList()..sort();
+    await prefs.setStringList(_keyReminderTimes, cleaned);
+  }
+
+  /// 校验 "HH:MM" 字符串是否合法
+  static bool _isValidTimeString(String s) {
+    final m = RegExp(r'^([01]\d|2[0-3]):([0-5]\d)$').firstMatch(s);
+    return m != null;
   }
 }

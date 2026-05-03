@@ -1,8 +1,10 @@
 /// APK 构建包装脚本：自动注入真实 IP，构建完成后恢复占位符。
 ///
-/// 用法：dart run scripts/build_apk.dart [--release|--debug|--profile]
+/// 用法：dart run scripts/build_apk.dart [--release|--debug|--profile] [--split] [其他 flutter build apk 参数...]
 ///
-/// 等价于 flutter build apk，但在构建前后自动处理 network_security_config.xml
+/// 等价于 flutter build apk，但在构建前后自动处理 network_security_config.xml。
+/// 已知 build mode 标志和 --split 会被识别，其余参数原样转发给 flutter。
+/// 分架构打包示例：dart run scripts/build_apk.dart --release --split
 import 'dart:io';
 
 const _placeholder = 'YOUR_SERVER_IP';
@@ -51,15 +53,18 @@ void main(List<String> args) async {
   print('[inject] 已将 $serverIp 注入 network_security_config.xml');
 
   // 3. 运行 flutter build
-  final buildMode = _resolveBuildMode(args);
+  final parsed = _parseArgs(args);
   final buildArgs = <String>['build', 'apk'];
-  if (buildMode != null) buildArgs.add('--$buildMode');
+  if (parsed.buildMode != null) buildArgs.add('--${parsed.buildMode}');
+  if (parsed.splitPerAbi) buildArgs.add('--split-per-abi');
+  buildArgs.addAll(parsed.passthrough);
 
   print('[build] 运行: flutter ${buildArgs.join(' ')} ...');
   final buildResult = await Process.start(
     'flutter',
     buildArgs,
     mode: ProcessStartMode.inheritStdio,
+    runInShell: true,
   );
   final exitCode = await buildResult.exitCode;
 
@@ -72,15 +77,62 @@ void main(List<String> args) async {
   }
 
   print('[done] APK 构建完成，XML 配置已恢复安全状态');
+
+  // 5. 输出 APK 路径信息
+  _printApkInfo(projectRoot, parsed.splitPerAbi);
 }
 
-String? _resolveBuildMode(List<String> args) {
+class _ParsedArgs {
+  final String? buildMode;
+  final bool splitPerAbi;
+  final List<String> passthrough;
+  _ParsedArgs(this.buildMode, this.splitPerAbi, this.passthrough);
+}
+
+_ParsedArgs _parseArgs(List<String> args) {
+  String? mode;
+  var splitPerAbi = false;
+  final rest = <String>[];
   for (final arg in args) {
-    if (arg == '--release') return 'release';
-    if (arg == '--debug') return 'debug';
-    if (arg == '--profile') return 'profile';
+    if (arg == '--release') {
+      mode = 'release';
+    } else if (arg == '--debug') {
+      mode = 'debug';
+    } else if (arg == '--profile') {
+      mode = 'profile';
+    } else if (arg == '--split' || arg == '--split-per-abi') {
+      splitPerAbi = true;
+    } else {
+      rest.add(arg);
+    }
   }
-  return null;
+  return _ParsedArgs(mode, splitPerAbi, rest);
+}
+
+void _printApkInfo(String projectRoot, bool splitPerAbi) {
+  final buildDir = Directory(
+    '${projectRoot}build${Platform.pathSeparator}'
+    'app${Platform.pathSeparator}outputs${Platform.pathSeparator}flutter-apk',
+  );
+  if (!buildDir.existsSync()) return;
+
+  final apkPattern = splitPerAbi ? RegExp(r'app-.*\.apk$') : RegExp(r'app\.apk$');
+  final files = buildDir
+      .listSync()
+      .whereType<File>()
+      .where((f) => apkPattern.hasMatch(f.path.split(Platform.pathSeparator).last))
+      .toList()
+    ..sort((a, b) => a.path.compareTo(b.path));
+
+  if (files.isEmpty) return;
+
+  print('\n[output] 生成的 APK：');
+  for (final file in files) {
+    final name = file.path.split(Platform.pathSeparator).last;
+    final sizeBytes = file.lengthSync();
+    final sizeMb = sizeBytes / (1024 * 1024);
+    print('  ${sizeMb.toStringAsFixed(2)} MB  ->  ${file.path}');
+  }
 }
 
 String _findProjectRoot() {

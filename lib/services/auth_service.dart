@@ -63,7 +63,8 @@ class AuthService extends ChangeNotifier {
       }
       // 应用启动后若已登录，尝试同步上次未上传的本地记录
       try {
-        _lastSyncResult = await SyncService.syncLocalToBackend();
+        _lastSyncResult = await SyncService.syncLocalToBackend()
+            .timeout(const Duration(seconds: 10));
       } catch (e) {
         print('Sync local data on startup failed: $e');
       }

@@ -17,6 +17,13 @@ dependencies:
   collection: ^1.18.0
   provider: ^6.1.4
 
+  # 本地通知（每日记账提醒）
+  flutter_local_notifications: ^17.2.4
+  timezone: ^0.9.4
+  permission_handler: ^11.3.1
+  device_info_plus: ^10.1.2
+  android_intent_plus: ^5.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
