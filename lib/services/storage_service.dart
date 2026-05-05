@@ -131,4 +131,20 @@ class StorageService {
     final m = RegExp(r'^([01]\d|2[0-3]):([0-5]\d)$').firstMatch(s);
     return m != null;
   }
+
+  // ========== 开发者模式配置 ==========
+
+  static const String _keyDevModeEnabled = 'dev_mode_enabled';
+
+  /// 开发者模式是否开启（默认 false）
+  static Future<bool> isDevModeEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyDevModeEnabled) ?? false;
+  }
+
+  /// 设置开发者模式开关
+  static Future<void> setDevModeEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyDevModeEnabled, enabled);
+  }
 }

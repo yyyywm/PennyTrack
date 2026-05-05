@@ -49,7 +49,7 @@ lib/
 │   ├── category.dart      # Category data model
 │   └── transaction.dart   # Transaction data model
 ├── pages/
-│   ├── home_page.dart     # Today's expense/income list with date filter
+│   ├── home_page.dart     # Expense/income list with 4-mode date filter (今日/昨日/本月/自定义)
 │   ├── login_page.dart    # Login / profile view
 │   ├── navigate_page.dart # Main scaffold with drawer + page switching
 │   ├── register_page.dart # User registration
@@ -57,8 +57,8 @@ lib/
 ├── services/
 │   ├── api_service.dart   # Dio HTTP client, all backend APIs
 │   ├── auth_service.dart  # Singleton: token persistence, login/logout
-│   ├── notification_service.dart # Singleton: daily reminder scheduling, OEM deep-links
-│   ├── storage_service.dart # SharedPreferences CRUD, daily auto-cleanup, reminder prefs
+│   ├── notification_service.dart # Singleton: daily reminder scheduling, diagnostics, OEM deep-links
+│   ├── storage_service.dart # SharedPreferences CRUD, daily auto-cleanup, reminder + dev-mode prefs
 │   └── sync_service.dart  # Local-to-backend batch sync on login (mutex-protected)
 ├── utils/
 │   ├── text_parser.dart   # Natural language parsing: amount, type, category, note
@@ -66,7 +66,7 @@ lib/
 │   └── toast_utils.dart   # showCenterToast() overlay helper
 └── widgets/
     ├── add_record_sheet.dart      # Bottom sheet for adding/editing transactions
-    ├── reminder_settings_card.dart # Daily reminder settings UI (toggle + time chips + OEM tips)
+    ├── reminder_settings_card.dart # Daily reminder settings UI (toggle + time chips + OEM tips + diagnostics + dev-mode)
     └── transaction_card.dart      # Individual transaction list item
 ```
 
@@ -118,8 +118,10 @@ UI authentication state is managed via `AuthService` (singleton `ChangeNotifier`
 - Adding a record: if logged in -> API create -> refresh list; if offline -> local storage -> refresh list.
 - **Smart input**: `AddRecordSheet` includes a "Smart Recognition" text field. After 1s debounce, `TextParser.parse()` extracts amount, income/expense type, category, and note from natural language (e.g., "打车26", "工资8500"). Uses priority-ranked regex pipeline with negation filtering.
 - `SyncService.syncLocalToBackend()` is called on login to upload offline records, then clears local cache. Uses a `Completer`-based mutex to prevent concurrent sync executions and duplicate uploads. The startup-time sync is wrapped with a 10-second timeout in `AuthService` to avoid blocking app launch on slow networks.
-- `StorageService` persists JSON to `SharedPreferences` under `menu_items_today` and auto-clears when the date changes. Reminder preferences (`reminder_enabled` bool + `reminder_times` `List<String>`) are also stored here.
+- `StorageService` persists JSON to `SharedPreferences` under `menu_items_today` and auto-clears when the date changes. Reminder preferences (`reminder_enabled` bool + `reminder_times` `List<String>`) and a developer-mode flag (`dev_mode_enabled`) are also stored here.
 - **Daily reminders**: `NotificationService` (singleton) schedules local notifications via `flutter_local_notifications` using `AndroidScheduleMode.exactAllowWhileIdle` (system AlarmManager). Per-time notification IDs are computed as `hour*100 + minute`. On every app launch, `rescheduleFromStorage()` re-registers all reminders to recover from Chinese OEM ROMs that may kill scheduled tasks. Notification taps with payload `"open_add"` are forwarded to `NavigatePage` via `registerTapHandler`, which switches to the home tab and opens the add-record sheet. A global `navigatorKey` in `main.dart` enables cross-context navigation. Cold-start launch payload is captured during `initialize()` and replayed once a tap handler is registered. Reminder settings are exposed both pre-login and post-login on `LoginPage`, so the feature works without an account.
+- **Reminder diagnostics**: `NotificationService.enableAndSchedule()` returns a `ReminderDiagnostics` object (exact-alarm permission status, local timezone, pending notification count, schedule results, next trigger times). `ReminderSettingsCard` surfaces this via an 8-second SnackBar after enabling reminders, and exposes a "查看诊断信息" entry to read the current state without re-scheduling. `getDiagnostics()` provides a read-only view. If both exact and inexact scheduling fail, the exception propagates to the UI instead of being silently swallowed.
+- **Developer mode**: `StorageService` stores a `dev_mode_enabled` flag toggled from `ReminderSettingsCard`. When enabled, diagnostic details are surfaced in the UI for troubleshooting schedule failures on domestic ROMs without requiring `adb logcat`.
 
 ### Assets
 
@@ -165,7 +167,7 @@ Tests are in `test/widget_test.dart`. After refactoring, the tests verify the ap
 - **Backend URL configuration**: Production and emulator URLs are defined in `lib/config/api_config.dart` (gitignored). New developers should copy `api_config.template.dart` to `api_config.dart` and fill in their own server address.
 - **Build automation**: `scripts/build_apk.dart` wraps `flutter build apk` and automatically injects the real server IP from `api_config.dart` into `network_security_config.xml` before building, then restores the `YOUR_SERVER_IP` placeholder afterward. This prevents accidental IP leaks in Git while ensuring the APK works on ColorOS/MIUI.
 - **Network security for domestic ROMs**: `AndroidManifest.xml` sets `usesCleartextTraffic="true"` and references `network_security_config.xml`, which explicitly whitelists the production server, `10.0.2.2`, and `localhost` for cleartext traffic. This is necessary because ColorOS, MIUI, and other domestic OEM ROMs may ignore or override the global cleartext flag. The config also includes `debug-overrides` for packet capture tools.
-- **Reminder permissions**: `AndroidManifest.xml` declares `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `USE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, `VIBRATE`, and `WAKE_LOCK`. Two `flutter_local_notifications` receivers are registered (`ScheduledNotificationReceiver` for fired alarms and `ScheduledNotificationBootReceiver` for `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` / OEM quickboot actions) so reminders survive device reboots and app updates.
+- **Reminder permissions**: `AndroidManifest.xml` declares `POST_NOTIFICATIONS`, `SCHEDULE_EXACT_ALARM`, `RECEIVE_BOOT_COMPLETED`, `VIBRATE`, and `WAKE_LOCK`. Two `flutter_local_notifications` receivers are registered (`ScheduledNotificationReceiver` for fired alarms and `ScheduledNotificationBootReceiver` for `BOOT_COMPLETED` / `MY_PACKAGE_REPLACED` / OEM quickboot actions) so reminders survive device reboots and app updates. `USE_EXACT_ALARM` was removed to avoid Play Store review flags; the app relies on `SCHEDULE_EXACT_ALARM` and falls back to inexact scheduling if the user denies the exact-alarm permission.
 - **Core library desugaring**: `android/app/build.gradle.kts` enables `isCoreLibraryDesugaringEnabled = true` with `desugar_jdk_libs:2.0.4` because `flutter_local_notifications` uses `java.time` APIs that need backporting for older Android targets.
 - **Timezone fallback**: `NotificationService._setupLocalTimezone()` maps non-IANA names returned by Chinese-locale Android (e.g., `"中国标准时间"`, `"CST"`) to IANA zones, then falls back to UTC-offset-based selection, then to UTC. Without this, `tz.local` may be wrong and `zonedSchedule` will fire at incorrect times (observed on OnePlus 15 / ColorOS 16).
 - **Build script enhancements**: `scripts/build_apk.dart` now supports `--split` (split-per-abi), forwards unrecognized flags to `flutter build apk`, runs `flutter` via `runInShell: true` for Windows compatibility, and prints generated APK paths with file sizes after a successful build.

@@ -24,7 +24,7 @@ class HomePageState extends State<HomePage> {
   DateTime _startDate = DateTime.now();
   DateTime _endDate = DateTime.now();
 
-  /// 0=今日 1=本月 2=自定义
+  /// 0=今日 1=昨日 2=本月 3=自定义
   int _rangeMode = 0;
 
   @override
@@ -103,10 +103,21 @@ class HomePageState extends State<HomePage> {
     _loadData();
   }
 
+  void _setYesterday() {
+    final now = DateTime.now();
+    final yesterday = now.subtract(const Duration(days: 1));
+    setState(() {
+      _rangeMode = 1;
+      _startDate = DateTime(yesterday.year, yesterday.month, yesterday.day);
+      _endDate = DateTime(yesterday.year, yesterday.month, yesterday.day, 23, 59, 59);
+    });
+    _loadData();
+  }
+
   void _setMonth() {
     final now = DateTime.now();
     setState(() {
-      _rangeMode = 1;
+      _rangeMode = 2;
       _startDate = DateTime(now.year, now.month, 1);
       _endDate = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
     });
@@ -123,7 +134,7 @@ class HomePageState extends State<HomePage> {
     if (picked != null) {
       if (!mounted) return;
       setState(() {
-        _rangeMode = 2;
+        _rangeMode = 3;
         _startDate = DateTime(
             picked.start.year, picked.start.month, picked.start.day);
         _endDate = DateTime(
@@ -207,6 +218,8 @@ class HomePageState extends State<HomePage> {
       case 0:
         return '今日结余';
       case 1:
+        return '昨日结余';
+      case 2:
         return '本月结余';
       default:
         final s = _startDate;
@@ -422,8 +435,9 @@ class HomePageState extends State<HomePage> {
         ),
         segments: const [
           ButtonSegment(value: 0, label: Text('今日')),
-          ButtonSegment(value: 1, label: Text('本月')),
-          ButtonSegment(value: 2, label: Text('自定义')),
+          ButtonSegment(value: 1, label: Text('昨日')),
+          ButtonSegment(value: 2, label: Text('本月')),
+          ButtonSegment(value: 3, label: Text('自定义')),
         ],
         selected: {_rangeMode},
         showSelectedIcon: false,
@@ -432,6 +446,8 @@ class HomePageState extends State<HomePage> {
           if (v == 0) {
             _setToday();
           } else if (v == 1) {
+            _setYesterday();
+          } else if (v == 2) {
             _setMonth();
           } else {
             _pickDateRange();

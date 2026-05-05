@@ -23,6 +23,7 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
   List<String> _times = [];
   bool _loading = true;
   bool _showOemTips = false;
+  bool _devMode = false;
 
   @override
   void initState() {
@@ -34,11 +35,13 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
     final enabled = await StorageService.isReminderEnabled();
     final times = await StorageService.loadReminderTimes();
     final oem = await NotificationService.instance.isChineseOemRom();
+    final devMode = await StorageService.isDevModeEnabled();
     if (!mounted) return;
     setState(() {
       _enabled = enabled;
       _times = times;
       _showOemTips = oem;
+      _devMode = devMode;
       _loading = false;
     });
   }
@@ -64,11 +67,15 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
         _enabled = true;
         _times = times;
       });
+
+      ReminderDiagnostics? diag;
+      String? errorMsg;
       try {
-        await NotificationService.instance.enableAndSchedule(times);
+        diag = await NotificationService.instance.enableAndSchedule(times);
       } catch (e) {
-        debugPrint('Enable reminder failed: $e');
+        errorMsg = e.toString();
       }
+
       if (!mounted) return;
       showCenterToast(
         context: context,
@@ -76,9 +83,11 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
         icon: Icons.notifications_active,
         backgroundColor: Colors.green,
       );
+
+      // 用 toast 显示诊断信息（比弹窗更可靠，国产 ROM 可能拦截弹窗）
+      final info = diag?.toString() ?? '诊断: $errorMsg';
+      _showLongToast(info);
     } else {
-      // 关闭路径：先把 UI 翻成关，再去做 IO，
-      // 否则后台调用慢一拍时用户会感觉「关不掉」。
       setState(() => _enabled = false);
       try {
         await NotificationService.instance.disable();
@@ -92,6 +101,81 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
         icon: Icons.notifications_off_outlined,
       );
     }
+  }
+
+  void _showLongToast(String message) {
+    if (!mounted) return;
+    final scaffold = ScaffoldMessenger.of(context);
+    scaffold.showSnackBar(
+      SnackBar(
+        content: SelectableText(message),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: '关闭',
+          onPressed: () => scaffold.hideCurrentSnackBar(),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showDiagnostics() async {
+    if (!mounted) return;
+    showCenterToast(
+      context: context,
+      message: '正在检查...',
+      icon: Icons.hourglass_top,
+    );
+    final diag = await NotificationService.instance.getDiagnostics();
+    if (!mounted) return;
+    _showLongToast(diag.toString());
+  }
+
+  void _showDiagnosticsDialog(ReminderDiagnostics diag) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('提醒诊断信息'),
+        content: SingleChildScrollView(
+          child: SelectableText(diag.toString()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: SelectableText(message),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _onDevModeToggle(bool value) async {
+    setState(() => _devMode = value);
+    await StorageService.setDevModeEnabled(value);
+    if (!mounted) return;
+    showCenterToast(
+      context: context,
+      message: value ? '开发者模式已开启' : '开发者模式已关闭',
+      icon: value ? Icons.build_circle_outlined : Icons.build_outlined,
+      backgroundColor: value ? Colors.orange : Colors.grey,
+    );
   }
 
   Future<void> _addTime() async {
@@ -334,6 +418,13 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
               trailing: const Icon(Icons.chevron_right),
               onTap: _sendTest,
             ),
+            ListTile(
+              dense: true,
+              leading: const Icon(Icons.bug_report_outlined),
+              title: const Text('查看诊断信息'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _showDiagnostics,
+            ),
           ],
 
           if (_enabled && _showOemTips) ...[
@@ -391,6 +482,31 @@ class _ReminderSettingsCardState extends State<ReminderSettingsCard> {
               ),
             ),
           ],
+
+          // 开发者模式开关
+          const Divider(height: 1, indent: 16, endIndent: 16),
+          ListTile(
+            dense: true,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
+            leading: Icon(
+              Icons.build_outlined,
+              size: 20,
+              color: _devMode ? Colors.orange : Colors.grey,
+            ),
+            title: const Text(
+              '开发者模式',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+            subtitle: const Text(
+              '开启后设置提醒会弹出诊断信息',
+              style: TextStyle(fontSize: 11),
+            ),
+            trailing: Switch(
+              value: _devMode,
+              onChanged: _onDevModeToggle,
+            ),
+          ),
         ],
       ),
     );

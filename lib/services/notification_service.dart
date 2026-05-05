@@ -201,15 +201,25 @@ class NotificationService {
     final notif = await Permission.notification.request();
     if (!notif.isGranted) return false;
 
-    // 2. SCHEDULE_EXACT_ALARM（Android 12+，部分国产 ROM 不要求）
+    // 2. SCHEDULE_EXACT_ALARM（Android 12+）
     final android =
         _plugin.resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin>();
     if (android != null) {
       try {
         final canExact = await android.canScheduleExactNotifications();
+        if (kDebugMode) {
+          debugPrint('canScheduleExactNotifications: $canExact');
+        }
         if (canExact == false) {
+          // 引导用户去系统设置页开启精确闹钟权限
           await android.requestExactAlarmsPermission();
+          // 再次检查（用户可能已开启也可能未开启）
+          final canExactAfter = await android.canScheduleExactNotifications();
+          if (kDebugMode) {
+            debugPrint('canScheduleExactNotifications after request: $canExactAfter');
+          }
+          // 不强制返回 false，因为 inexact fallback 仍可工作
         }
       } catch (_) {
         // 老版本插件没有该方法，忽略
@@ -227,11 +237,59 @@ class NotificationService {
 
   // ========== 调度 ==========
 
-  /// 启用提醒并按 [times] 重新注册全部时间点
-  Future<void> enableAndSchedule(List<String> times) async {
+  /// 启用提醒并按 [times] 重新注册全部时间点，同时返回诊断信息
+  Future<ReminderDiagnostics> enableAndSchedule(List<String> times) async {
     await StorageService.setReminderEnabled(true);
     await StorageService.saveReminderTimes(times);
-    await _rescheduleAll(times);
+
+    bool exactAlarmAllowed = false;
+    if (Platform.isAndroid) {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        try {
+          exactAlarmAllowed =
+              await android.canScheduleExactNotifications().timeout(
+                    const Duration(seconds: 2),
+                    onTimeout: () => false,
+                  ) ??
+                  false;
+        } catch (_) {
+          exactAlarmAllowed = false;
+        }
+      }
+    }
+
+    final scheduleResults = <String>[];
+    await _plugin.cancelAll();
+    for (final t in times) {
+      final result = await _scheduleOneWithResult(t);
+      scheduleResults.add(result);
+    }
+
+    final pending = await _plugin.pendingNotificationRequests().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => [],
+        );
+
+    final now = tz.TZDateTime.now(tz.local);
+    final nextTriggerTimes = times.map((t) {
+      final parts = t.split(':');
+      final h = int.parse(parts[0]);
+      final m = int.parse(parts[1]);
+      final scheduled = _nextInstanceOf(h, m);
+      final diff = scheduled.difference(now);
+      return '$t (${diff.inHours}h${diff.inMinutes % 60}m 后)';
+    }).toList();
+
+    return ReminderDiagnostics(
+      exactAlarmAllowed: exactAlarmAllowed,
+      localTimezone: tz.local.name,
+      pendingCount: pending.length,
+      scheduleResults: scheduleResults,
+      currentTime: now.toString(),
+      nextTriggerTimes: nextTriggerTimes,
+    );
   }
 
   /// 关闭提醒并取消所有已注册通知
@@ -243,17 +301,77 @@ class NotificationService {
   /// 根据本地存储的开关 + 时间列表恢复定时（应用启动 / 设备重启后）
   Future<void> rescheduleFromStorage() async {
     final enabled = await StorageService.isReminderEnabled();
+    if (kDebugMode) {
+      debugPrint('rescheduleFromStorage: enabled=$enabled');
+    }
     if (!enabled) {
       await _plugin.cancelAll();
       return;
     }
     final times = await StorageService.loadReminderTimes();
+    if (kDebugMode) {
+      debugPrint('rescheduleFromStorage: times=$times');
+    }
     await _rescheduleAll(times);
+    // 调度完成后，打印 pending 通知数量用于诊断
+    if (kDebugMode) {
+      final pending = await _plugin.pendingNotificationRequests();
+      debugPrint('Pending notifications after reschedule: ${pending.length}');
+      for (final p in pending) {
+        debugPrint('  - id=${p.id}, title=${p.title}, body=${p.body}');
+      }
+    }
   }
 
   /// 读取已挂起的通知（调试用）
   Future<List<PendingNotificationRequest>> pendingNotifications() {
     return _plugin.pendingNotificationRequests();
+  }
+
+  /// 获取当前诊断信息（不触发调度，仅读取状态）
+  Future<ReminderDiagnostics> getDiagnostics() async {
+    bool exactAlarmAllowed = false;
+    if (Platform.isAndroid) {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        try {
+          exactAlarmAllowed =
+              await android.canScheduleExactNotifications().timeout(
+                    const Duration(seconds: 2),
+                    onTimeout: () => false,
+                  ) ??
+                  false;
+        } catch (_) {
+          exactAlarmAllowed = false;
+        }
+      }
+    }
+
+    final times = await StorageService.loadReminderTimes();
+    final pending = await _plugin.pendingNotificationRequests().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () => [],
+        );
+
+    final now = tz.TZDateTime.now(tz.local);
+    final nextTriggerTimes = times.map((t) {
+      final parts = t.split(':');
+      final h = int.parse(parts[0]);
+      final m = int.parse(parts[1]);
+      final scheduled = _nextInstanceOf(h, m);
+      final diff = scheduled.difference(now);
+      return '$t (${diff.inHours}h${diff.inMinutes % 60}m 后)';
+    }).toList();
+
+    return ReminderDiagnostics(
+      exactAlarmAllowed: exactAlarmAllowed,
+      localTimezone: tz.local.name,
+      pendingCount: pending.length,
+      scheduleResults: pending.map((p) => '  id=${p.id}: ${p.title}').toList(),
+      currentTime: now.toString(),
+      nextTriggerTimes: nextTriggerTimes,
+    );
   }
 
   /// 立刻发一条用于自检的通知
@@ -274,6 +392,15 @@ class NotificationService {
     }
   }
 
+  Future<String> _scheduleOneWithResult(String hhmm) async {
+    try {
+      await _scheduleOne(hhmm);
+      return '  $hhmm: 调度成功';
+    } catch (e) {
+      return '  $hhmm: 失败 — $e';
+    }
+  }
+
   Future<void> _scheduleOne(String hhmm) async {
     final parts = hhmm.split(':');
     if (parts.length != 2) return;
@@ -283,6 +410,10 @@ class NotificationService {
 
     final id = h * 100 + m;
     final scheduledAt = _nextInstanceOf(h, m);
+
+    if (kDebugMode) {
+      debugPrint('Scheduling reminder $hhmm at $scheduledAt (local=${tz.local})');
+    }
 
     try {
       await _plugin.zonedSchedule(
@@ -298,6 +429,9 @@ class NotificationService {
         matchDateTimeComponents: DateTimeComponents.time, // 每天同一时间
         payload: _payload,
       );
+      if (kDebugMode) {
+        debugPrint('Exact schedule succeeded for $hhmm');
+      }
     } catch (e) {
       // 部分设备无 SCHEDULE_EXACT_ALARM 权限时，回落到 inexact
       if (kDebugMode) {
@@ -316,12 +450,15 @@ class NotificationService {
           matchDateTimeComponents: DateTimeComponents.time,
           payload: _payload,
         );
+        if (kDebugMode) {
+          debugPrint('Inexact schedule succeeded for $hhmm');
+        }
       } catch (e2) {
-        // 国产 ROM 上 inexact 也可能失败；这里吞掉避免冒泡到 UI
-        // 否则上层 setState 永远不会执行（典型表现：编辑时间后 UI 不刷新）
+        // 两次都失败：把异常抛给上层，避免静默失败导致用户以为设置成功
         if (kDebugMode) {
           debugPrint('Inexact schedule also failed for $hhmm: $e2');
         }
+        throw Exception('Failed to schedule reminder $hhmm: $e2');
       }
     }
   }
@@ -477,5 +614,38 @@ class NotificationService {
     }
     // 全部失败，回落到应用详情页（用户可手动找到自启动选项）
     await openAppDetailsSettings();
+  }
+}
+
+/// 提醒诊断信息（返回给 UI 层弹窗显示，无需 adb）
+class ReminderDiagnostics {
+  final bool exactAlarmAllowed;
+  final String localTimezone;
+  final int pendingCount;
+  final List<String> scheduleResults;
+  final String currentTime;
+  final List<String> nextTriggerTimes;
+
+  ReminderDiagnostics({
+    required this.exactAlarmAllowed,
+    required this.localTimezone,
+    required this.pendingCount,
+    required this.scheduleResults,
+    required this.currentTime,
+    required this.nextTriggerTimes,
+  });
+
+  @override
+  String toString() {
+    final exactStatus = exactAlarmAllowed ? '✓ 已允许' : '✗ 未允许';
+    final lines = <String>[
+      '精确闹钟: $exactStatus',
+      '时区: $localTimezone',
+      '当前时间: $currentTime',
+      ...nextTriggerTimes.map((t) => '下次触发: $t'),
+      '已注册通知: $pendingCount 个',
+      ...scheduleResults,
+    ];
+    return lines.join('\n');
   }
 }
