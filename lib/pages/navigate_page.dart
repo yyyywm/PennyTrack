@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../services/notification_service.dart';
 import 'home_page.dart';
 import 'login_page.dart';
 import 'statistics_page.dart';
@@ -28,8 +27,6 @@ class _NavigatePageState extends State<NavigatePage> {
   void initState() {
     super.initState();
     AuthService.instance.addListener(_onAuthChanged);
-    // 注册通知点击回调：点击通知后回到首页并弹出添加记录面板
-    NotificationService.instance.registerTapHandler(_onNotificationTap);
   }
 
   @override
@@ -40,13 +37,6 @@ class _NavigatePageState extends State<NavigatePage> {
 
   void _onAuthChanged() {
     if (mounted) setState(() {});
-  }
-
-  /// 通知点击回调：固定切换到首页 + 弹出添加记录面板
-  void _onNotificationTap(String? payload) {
-    if (!mounted) return;
-    if (payload != 'open_add') return;
-    _onAddPressed();
   }
 
   void _onAddPressed() {

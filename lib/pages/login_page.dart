@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../widgets/reminder_settings_card.dart';
 import 'register_page.dart';
 
 /// 登录页面
@@ -187,7 +186,7 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // ========== 卡片容器（与 ReminderSettingsCard 视觉一致） ==========
+  // ========== 卡片容器 ==========
   Widget _card({required Widget child, EdgeInsets? padding}) {
     return Container(
       padding: padding,
@@ -322,10 +321,6 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                _sectionTitle('应用设置'),
-                // 提醒设置（与登录态无关，未登录也可使用）
-                const ReminderSettingsCard(),
               ],
             ),
           ),
@@ -394,9 +389,6 @@ class _LoginPageState extends State<LoginPage> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 24),
-                _sectionTitle('应用设置'),
-                const ReminderSettingsCard(),
                 const SizedBox(height: 28),
                 // 退出登录按钮：填充式浅红，醒目但不刺眼
                 SizedBox(
